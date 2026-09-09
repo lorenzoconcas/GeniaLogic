@@ -1,6 +1,6 @@
 # GeniaLogic
 
-Applicazione locale per creare, esplorare e conservare alberi genealogici complessi.
+Applicazione per creare, esplorare e conservare alberi genealogici complessi, con dati salvati localmente nel browser.
 
 ## Avvio
 
@@ -16,8 +16,33 @@ npm run build
 npm run preview
 ```
 
+Lo sviluppo usa `http://localhost:5173/`. L’anteprima della build usa
+`http://localhost:4173/genialogic/` (le porte possono variare se occupate).
+
+## GitHub Pages
+
+Indirizzo previsto: **https://lorenzoconcas.github.io/genialogic/**.
+
+1. Carica il progetto nel repository `lorenzoconcas/genialogic`, branch `main`,
+   includendo `.github/workflows/pages.yml` e `package-lock.json`.
+2. In **Settings → Pages → Build and deployment → Source**, scegli **GitHub Actions**.
+3. Il workflow **Publish GeniaLogic to GitHub Pages** parte a ogni push su `main`.
+   Puoi anche avviarlo da **Actions → Publish GeniaLogic to GitHub Pages → Run workflow**.
+4. Al completamento del job `deploy`, apri l’indirizzo sopra.
+
+Il workflow usa Node.js 24, installa le dipendenze dal lockfile e pubblica solo
+`dist/`. Non occorre aggiungere `dist/` al repository o creare un branch `gh-pages`.
+La configurazione Vite usa `/genialogic/` per gli asset di produzione, mantenendo
+il percorso `/` durante lo sviluppo locale. Non è necessario un backend.
+
+Riferimento: [pubblicazione Vite su GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages).
+
 ## Dati
 
 GeniaLogic mantiene automaticamente una copia dell'albero nel database locale del browser. Dalla sezione **Archivio** è possibile salvare e riaprire file `.genia` esterni.
 
 Il formato `.genia` contiene dati JSON compressi con Gzip e un'intestazione proprietaria. Non è cifrato: il file va conservato come un normale documento personale.
+
+La pubblicazione rende accessibile l’app, ma non carica gli alberi su GitHub.
+Il sito pubblicato e `localhost` hanno archivi del browser separati: per spostare
+il tuo albero, esporta il file `.genia` da localhost e importalo nel sito pubblicato.
