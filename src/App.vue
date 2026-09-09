@@ -1,0 +1,719 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { Background } from '@vue-flow/background'
+import { Controls } from '@vue-flow/controls'
+import { MarkerType, VueFlow, useVueFlow, type Edge, type Node } from '@vue-flow/core'
+import {
+  Archive, CalendarDays, Check, ChevronRight, Download, Edit3, FilePlus2, FolderOpen,
+  CircleDot, Focus, GitFork, Heart, Info, Link2, ListFilter, MapPin, Maximize2, Menu, MoreHorizontal,
+  ArrowLeftRight, Plus, Save, Search, ShieldCheck, Trash2, Upload, UserRoundPlus, Users, X,
+} from '@lucide/vue'
+import ModalShell from './components/ModalShell.vue'
+import PersonNode from './components/PersonNode.vue'
+import RadialTree from './components/RadialTree.vue'
+import PersonPicker from './components/PersonPicker.vue'
+import { emptyTree, personColors, relationshipOptions } from './data'
+import { exportTree, importTree, loadLocal, saveLocal } from './services/storage'
+import { generationLayout } from './services/generationLayout'
+import type { FamilyTree, Gender, Person, Relationship, RelationshipType } from './types'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/controls/dist/style.css'
+
+type ViewName = 'tree' | 'people' | 'relationships' | 'archive'
+type LayoutMode = 'generational' | 'focus' | 'radial'
+type PersonForm = Omit<Person, 'id'>
+type RelativeKind = 'father' | 'mother' | 'son' | 'daughter' | 'brother' | 'sister' | 'spouse' | 'partner'
+type ParentLinkType = 'biological-parent' | 'adoptive-parent' | 'foster-parent'
+
+const tree = ref<FamilyTree>(emptyTree())
+const activeView = ref<ViewName>('tree')
+const layoutMode = ref<LayoutMode>('generational')
+const selectedPersonId = ref<string | null>(null)
+const search = ref('')
+const mobileNavOpen = ref(false)
+const modal = ref<'person' | 'relative' | 'couple-child' | 'relationship' | 'delete-person' | 'delete-relationship' | 'new-tree' | null>(null)
+const editingPersonId = ref<string | null>(null)
+const pendingRelationshipId = ref<string | null>(null)
+const pendingCoupleId = ref<string | null>(null)
+const relativeReturnPersonId = ref<string | null>(null)
+const relationshipError = ref('')
+const saveState = ref<'saved' | 'saving' | 'error'>('saved')
+const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
+const hydrated = ref(false)
+let saveTimer: number | undefined
+let toastTimer: number | undefined
+
+const blankPerson = (): PersonForm => ({
+  firstName: '', lastName: '', birthName: '', nickname: '', gender: 'unspecified', birthDate: '',
+  deathDate: '', birthPlace: '', occupation: '', notes: '', color: personColors[tree.value.people.length % personColors.length],
+})
+const personForm = reactive<PersonForm>(blankPerson())
+const relationshipForm = reactive<{ sourceId: string; targetId: string; type: RelationshipType; startDate: string; endDate: string; notes: string }>({
+  sourceId: '', targetId: '', type: 'biological-parent', startDate: '', endDate: '', notes: '',
+})
+const relativeKind = ref<RelativeKind>('father')
+const relativeForm = reactive<{ firstName: string; lastName: string; gender: Gender; birthDate: string; birthPlace: string; color: string }>({
+  firstName: '', lastName: '', gender: 'male', birthDate: '', birthPlace: '', color: personColors[0],
+})
+const childForm = reactive<{ firstName: string; lastName: string; gender: Gender; birthDate: string; birthPlace: string; color: string; firstParentType: ParentLinkType; secondParentType: ParentLinkType }>({
+  firstName: '', lastName: '', gender: 'unspecified', birthDate: '', birthPlace: '', color: personColors[0], firstParentType: 'biological-parent', secondParentType: 'biological-parent',
+})
+
+const { fitView } = useVueFlow()
+
+const navItems = [
+  { id: 'tree' as const, label: 'Albero', icon: GitFork },
+  { id: 'people' as const, label: 'Persone', icon: Users },
+  { id: 'relationships' as const, label: 'Legami', icon: Link2 },
+  { id: 'archive' as const, label: 'Archivio', icon: Archive },
+]
+
+const relativeChoices: Array<{ value: RelativeKind; label: string; description: string; gender: Gender; copySurname: boolean }> = [
+  { value: 'father', label: 'Padre', description: 'Genitore biologico', gender: 'male', copySurname: true },
+  { value: 'mother', label: 'Madre', description: 'Genitore biologico', gender: 'female', copySurname: true },
+  { value: 'son', label: 'Figlio', description: 'Figlio biologico', gender: 'male', copySurname: true },
+  { value: 'daughter', label: 'Figlia', description: 'Figlia biologica', gender: 'female', copySurname: true },
+  { value: 'brother', label: 'Fratello', description: 'Condivide i genitori noti', gender: 'male', copySurname: true },
+  { value: 'sister', label: 'Sorella', description: 'Condivide i genitori noti', gender: 'female', copySurname: true },
+  { value: 'spouse', label: 'Coniuge', description: 'Legame matrimoniale', gender: 'unspecified', copySurname: false },
+  { value: 'partner', label: 'Partner', description: 'Relazione di coppia', gender: 'unspecified', copySurname: false },
+]
+
+const selectedPerson = computed(() => tree.value.people.find((person) => person.id === selectedPersonId.value) ?? null)
+const pendingRelationship = computed(() => tree.value.relationships.find((relationship) => relationship.id === pendingRelationshipId.value) ?? null)
+const pendingCouple = computed(() => tree.value.relationships.find((relationship) => relationship.id === pendingCoupleId.value) ?? null)
+const selectedRelativeChoice = computed(() => relativeChoices.find((choice) => choice.value === relativeKind.value)!)
+const filteredPeople = computed(() => {
+  const term = search.value.trim().toLocaleLowerCase('it')
+  if (!term) return tree.value.people
+  return tree.value.people.filter((person) => `${person.firstName} ${person.lastName} ${person.birthName ?? ''} ${person.birthPlace ?? ''}`.toLocaleLowerCase('it').includes(term))
+})
+const parentTypeValues = new Set<RelationshipType>(['biological-parent', 'adoptive-parent', 'foster-parent', 'guardian'])
+const sharedParentTypeValues = new Set<RelationshipType>(['biological-parent', 'adoptive-parent', 'foster-parent'])
+const coupleTypeValues = new Set<RelationshipType>(['married', 'civil-union', 'partner', 'separated', 'divorced', 'former-partner'])
+const nodeWidth = 192
+const nodeHeight = 82
+
+function flowNode(person: Person, x: number, y: number): Node {
+  return {
+    id: person.id,
+    type: 'person',
+    position: { x: x - nodeWidth / 2, y: y - nodeHeight / 2 },
+    data: { person, selected: selectedPersonId.value === person.id },
+  }
+}
+
+function relationshipNeighbours(personId: string) {
+  return tree.value.relationships.flatMap((relationship) => {
+    if (relationship.sourceId !== personId && relationship.targetId !== personId) return []
+    const fromSource = relationship.sourceId === personId
+    const otherId = fromSource ? relationship.targetId : relationship.sourceId
+    const generationDelta = parentTypeValues.has(relationship.type) ? (fromSource ? 1 : -1) : 0
+    return [{ id: otherId, generationDelta }]
+  })
+}
+
+function centredPositions(rootId: string) {
+  const generations = new Map<string, number>([[rootId, 0]])
+  const distances = new Map<string, number>([[rootId, 0]])
+  const queue = [rootId]
+  while (queue.length) {
+    const currentId = queue.shift()!
+    for (const neighbour of relationshipNeighbours(currentId)) {
+      if (generations.has(neighbour.id)) continue
+      generations.set(neighbour.id, generations.get(currentId)! + neighbour.generationDelta)
+      distances.set(neighbour.id, distances.get(currentId)! + 1)
+      queue.push(neighbour.id)
+    }
+  }
+
+  const highestGeneration = Math.max(0, ...generations.values())
+  for (const person of tree.value.people) {
+    if (!generations.has(person.id)) {
+      generations.set(person.id, highestGeneration + 2)
+      distances.set(person.id, Number.MAX_SAFE_INTEGER)
+    }
+  }
+
+  const rows = new Map<number, Person[]>()
+  for (const person of tree.value.people) {
+    const generation = generations.get(person.id)!
+    rows.set(generation, [...(rows.get(generation) ?? []), person])
+  }
+
+  const positions = new Map<string, { x: number; y: number }>()
+  const horizontalGap = 238
+  const verticalGap = 168
+  for (const [generation, people] of [...rows.entries()].sort(([a], [b]) => a - b)) {
+    const sorted = [...people].sort((a, b) => {
+      if (a.id === rootId) return -1
+      if (b.id === rootId) return 1
+      return (distances.get(a.id)! - distances.get(b.id)!) || fullName(a).localeCompare(fullName(b), 'it')
+    })
+    if (generation === 0 && sorted.some((person) => person.id === rootId)) {
+      positions.set(rootId, { x: 0, y: 0 })
+      sorted.filter((person) => person.id !== rootId).forEach((person, index) => {
+        const side = index % 2 === 0 ? -1 : 1
+        positions.set(person.id, { x: side * (Math.floor(index / 2) + 1) * horizontalGap, y: 0 })
+      })
+    } else {
+      sorted.forEach((person, index) => positions.set(person.id, {
+        x: (index - (sorted.length - 1) / 2) * horizontalGap,
+        y: generation * verticalGap,
+      }))
+    }
+  }
+  return positions
+}
+
+const generationPositions = computed(() => generationLayout(tree.value.people, tree.value.relationships))
+
+function makeFlowNodes(): Node[] {
+  const rootId = selectedPersonId.value ?? tree.value.people[0]?.id
+  if (rootId && layoutMode.value === 'focus') {
+    const positions = centredPositions(rootId)
+    return tree.value.people.map((person) => {
+      const point = positions.get(person.id) ?? { x: 0, y: 0 }
+      return flowNode(person, point.x, point.y)
+    })
+  }
+  return tree.value.people.map((person) => {
+    const point = generationPositions.value.get(person.id) ?? { x: 0, y: 0 }
+    return flowNode(person, point.x, point.y)
+  })
+}
+
+const flowNodes = computed(() => makeFlowNodes())
+const flowEdges = computed<Edge[]>(() => tree.value.relationships.map((relationship) => {
+  const option = relationshipOptions.find((item) => item.value === relationship.type)!
+  const parent = option.group === 'Genitorialità'
+  const sibling = relationship.type === 'sibling'
+  const sourcePosition = generationPositions.value.get(relationship.sourceId)
+  const targetPosition = generationPositions.value.get(relationship.targetId)
+  const lateral = !parent && layoutMode.value === 'generational' && sourcePosition?.y === targetPosition?.y
+  const sourceOnLeft = (sourcePosition?.x ?? 0) < (targetPosition?.x ?? 0)
+  const color = parent ? '#6e7588' : sibling ? '#5657d9' : relationship.type === 'divorced' || relationship.type === 'separated' || relationship.type === 'former-partner' ? '#e85d75' : '#0f9b8e'
+  return {
+    id: relationship.id,
+    source: relationship.sourceId,
+    target: relationship.targetId,
+    sourceHandle: lateral ? (sourceOnLeft ? 'source-right' : 'source-left') : 'source-bottom',
+    targetHandle: lateral ? (sourceOnLeft ? 'target-left' : 'target-right') : 'target-top',
+    label: option.label,
+    type: parent && layoutMode.value === 'focus' ? 'smoothstep' : 'default',
+    markerEnd: parent ? { type: MarkerType.ArrowClosed, color } : undefined,
+    style: { stroke: color, strokeWidth: parent ? 1.7 : 2.2, strokeDasharray: relationship.type === 'divorced' || relationship.type === 'separated' || relationship.type === 'former-partner' ? '6 5' : undefined },
+    labelStyle: { fill: color, fontSize: 9, fontWeight: 700 },
+    labelBgStyle: { fill: '#faf8f2', fillOpacity: 0.94 },
+    labelBgPadding: [5, 3] as [number, number],
+    labelBgBorderRadius: 5,
+  }
+}))
+
+const relationshipGroups = computed(() => ['Genitorialità', 'Fratellanza', 'Coppia'].map((group) => ({
+  name: group,
+  options: relationshipOptions.filter((option) => option.group === group),
+})))
+
+function fullName(person?: Person | null) { return person ? `${person.firstName} ${person.lastName}` : 'Persona sconosciuta' }
+function findPerson(id: string) { return tree.value.people.find((person) => person.id === id) }
+function relationshipLabel(type: RelationshipType) { return relationshipOptions.find((option) => option.value === type)?.label ?? type }
+function initials(person: Person) { return `${person.firstName[0] || ''}${person.lastName[0] || ''}`.toUpperCase() }
+function dateLabel(value?: string) { return value ? new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '' }
+function lifeLabel(person: Person) {
+  if (!person.birthDate && !person.deathDate) return 'Date non inserite'
+  const birth = person.birthDate?.slice(0, 4) ?? '?'
+  return person.deathDate ? `${birth} – ${person.deathDate.slice(0, 4)}` : `n. ${birth}`
+}
+function showToast(message: string, tone: 'success' | 'error' = 'success') {
+  toast.value = { message, tone }
+  window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => { toast.value = null }, 3400)
+}
+function goTo(view: ViewName) { activeView.value = view; mobileNavOpen.value = false }
+
+function openNewPerson() {
+  editingPersonId.value = null
+  Object.assign(personForm, blankPerson())
+  modal.value = 'person'
+}
+function openEditPerson(person: Person) {
+  editingPersonId.value = person.id
+  Object.assign(personForm, { ...blankPerson(), ...person })
+  modal.value = 'person'
+}
+function openRelative() {
+  if (!selectedPerson.value) return
+  relativeReturnPersonId.value = null
+  relativeKind.value = 'father'
+  Object.assign(relativeForm, {
+    firstName: '',
+    lastName: selectedPerson.value.lastName,
+    gender: 'male' as Gender,
+    birthDate: '',
+    birthPlace: '',
+    color: personColors[tree.value.people.length % personColors.length],
+  })
+  modal.value = 'relative'
+}
+function openRelativeFor(personId: string) {
+  selectedPersonId.value = personId
+  openRelative()
+}
+function openParentFromRadial(payload: { childId: string; gender: Extract<Gender, 'male' | 'female'> }) {
+  selectedPersonId.value = payload.childId
+  openRelative()
+  relativeReturnPersonId.value = payload.childId
+  chooseRelative(payload.gender === 'male' ? 'father' : 'mother')
+}
+function chooseRelative(kind: RelativeKind) {
+  const previousChoice = selectedRelativeChoice.value
+  const surnameWasAutomatic = !relativeForm.lastName || (previousChoice.copySurname && relativeForm.lastName === selectedPerson.value?.lastName)
+  relativeKind.value = kind
+  const choice = selectedRelativeChoice.value
+  relativeForm.gender = choice.gender
+  if (choice.copySurname && surnameWasAutomatic) relativeForm.lastName = selectedPerson.value?.lastName ?? ''
+  if (!choice.copySurname && surnameWasAutomatic) relativeForm.lastName = ''
+}
+function submitRelative() {
+  const reference = selectedPerson.value
+  if (!reference || !relativeForm.firstName.trim() || !relativeForm.lastName.trim()) return
+  const newPerson: Person = {
+    id: crypto.randomUUID(), firstName: relativeForm.firstName.trim(), lastName: relativeForm.lastName.trim(),
+    gender: relativeForm.gender, birthDate: relativeForm.birthDate, birthPlace: relativeForm.birthPlace.trim(),
+    color: relativeForm.color,
+  }
+  const makeRelationship = (sourceId: string, targetId: string, type: RelationshipType): Relationship => ({
+    id: crypto.randomUUID(), sourceId, targetId, type,
+  })
+  const links: Relationship[] = []
+  if (relativeKind.value === 'father' || relativeKind.value === 'mother') {
+    links.push(makeRelationship(newPerson.id, reference.id, 'biological-parent'))
+  } else if (relativeKind.value === 'son' || relativeKind.value === 'daughter') {
+    links.push(makeRelationship(reference.id, newPerson.id, 'biological-parent'))
+  } else if (relativeKind.value === 'brother' || relativeKind.value === 'sister') {
+    const knownParents = tree.value.relationships.filter((relationship) => sharedParentTypeValues.has(relationship.type) && relationship.targetId === reference.id)
+    if (knownParents.length) {
+      knownParents.forEach((relationship) => links.push(makeRelationship(relationship.sourceId, newPerson.id, relationship.type)))
+    } else {
+      links.push(makeRelationship(reference.id, newPerson.id, 'sibling'))
+    }
+  } else {
+    links.push(makeRelationship(reference.id, newPerson.id, relativeKind.value === 'spouse' ? 'married' : 'partner'))
+  }
+  tree.value.people.push(newPerson)
+  tree.value.relationships.push(...links)
+  selectedPersonId.value = relativeReturnPersonId.value ?? newPerson.id
+  relativeReturnPersonId.value = null
+  modal.value = null
+  showToast('Persona e legame aggiunti')
+  refit()
+}
+function suggestedChildSurname(relationship: Relationship) {
+  const people = [findPerson(relationship.sourceId), findPerson(relationship.targetId)].filter((person): person is Person => Boolean(person))
+  return people.find((person) => person.gender === 'male')?.lastName
+    ?? people.find((person) => person.gender === 'female')?.lastName
+    ?? people[0]?.lastName
+    ?? ''
+}
+function openCoupleChild(relationship: Relationship) {
+  pendingCoupleId.value = relationship.id
+  Object.assign(childForm, {
+    firstName: '', lastName: suggestedChildSurname(relationship), gender: 'unspecified' as Gender,
+    birthDate: '', birthPlace: '', color: personColors[tree.value.people.length % personColors.length],
+    firstParentType: 'biological-parent' as ParentLinkType, secondParentType: 'biological-parent' as ParentLinkType,
+  })
+  modal.value = 'couple-child'
+}
+function submitCoupleChild() {
+  const relationship = pendingCouple.value
+  if (!relationship || !childForm.firstName.trim() || !childForm.lastName.trim()) return
+  const child: Person = {
+    id: crypto.randomUUID(), firstName: childForm.firstName.trim(), lastName: childForm.lastName.trim(),
+    gender: childForm.gender, birthDate: childForm.birthDate, birthPlace: childForm.birthPlace.trim(), color: childForm.color,
+  }
+  tree.value.people.push(child)
+  tree.value.relationships.push(
+    { id: crypto.randomUUID(), sourceId: relationship.sourceId, targetId: child.id, type: childForm.firstParentType },
+    { id: crypto.randomUUID(), sourceId: relationship.targetId, targetId: child.id, type: childForm.secondParentType },
+  )
+  selectedPersonId.value = child.id
+  pendingCoupleId.value = null
+  activeView.value = 'tree'
+  modal.value = null
+  showToast('Figlio o figlia aggiunto alla coppia')
+  refit()
+}
+function submitPerson() {
+  if (!personForm.firstName.trim() || !personForm.lastName.trim()) return
+  const clean = Object.fromEntries(Object.entries(personForm).map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])) as unknown as PersonForm
+  if (editingPersonId.value) {
+    const index = tree.value.people.findIndex((person) => person.id === editingPersonId.value)
+    if (index >= 0) tree.value.people[index] = { id: editingPersonId.value, ...clean }
+    showToast('Persona aggiornata')
+  } else {
+    const person = { id: crypto.randomUUID(), ...clean }
+    tree.value.people.push(person)
+    selectedPersonId.value = person.id
+    showToast('Persona aggiunta all’albero')
+  }
+  modal.value = null
+  refit()
+}
+function askDeletePerson(person: Person) { selectedPersonId.value = person.id; modal.value = 'delete-person' }
+function deleteSelectedPerson() {
+  if (!selectedPersonId.value) return
+  const id = selectedPersonId.value
+  tree.value.people = tree.value.people.filter((person) => person.id !== id)
+  tree.value.relationships = tree.value.relationships.filter((relationship) => relationship.sourceId !== id && relationship.targetId !== id)
+  selectedPersonId.value = tree.value.people[0]?.id ?? null
+  modal.value = null
+  showToast('Persona e relativi legami rimossi')
+  refit()
+}
+
+function openRelationship(prefillId?: string) {
+  relationshipError.value = ''
+  relationshipForm.sourceId = prefillId ?? selectedPersonId.value ?? tree.value.people[0]?.id ?? ''
+  relationshipForm.targetId = tree.value.people.find((person) => person.id !== relationshipForm.sourceId)?.id ?? ''
+  relationshipForm.type = 'biological-parent'
+  relationshipForm.startDate = ''
+  relationshipForm.endDate = ''
+  relationshipForm.notes = ''
+  modal.value = 'relationship'
+}
+function swapRelationshipPeople() {
+  const first = relationshipForm.sourceId
+  relationshipForm.sourceId = relationshipForm.targetId
+  relationshipForm.targetId = first
+  relationshipError.value = ''
+}
+function hasParentPath(fromId: string, toId: string, visited = new Set<string>()): boolean {
+  if (fromId === toId) return true
+  if (visited.has(fromId)) return false
+  visited.add(fromId)
+  return tree.value.relationships.filter((rel) => parentTypeValues.has(rel.type) && rel.sourceId === fromId).some((rel) => hasParentPath(rel.targetId, toId, visited))
+}
+function validateRelationship(): string | null {
+  const { sourceId, targetId, type } = relationshipForm
+  if (!sourceId || !targetId) return 'Scegli entrambe le persone.'
+  if (sourceId === targetId) return 'Una persona non può avere un legame con sé stessa.'
+  const option = relationshipOptions.find((item) => item.value === type)!
+  const duplicate = tree.value.relationships.some((rel) => rel.type === type && (option.directional
+    ? rel.sourceId === sourceId && rel.targetId === targetId
+    : (rel.sourceId === sourceId && rel.targetId === targetId) || (rel.sourceId === targetId && rel.targetId === sourceId)))
+  if (duplicate) return 'Questo legame è già presente.'
+  if (parentTypeValues.has(type)) {
+    if (hasParentPath(targetId, sourceId)) return 'Questo legame creerebbe un ciclo tra genitori e figli.'
+    if (type === 'biological-parent' && tree.value.relationships.filter((rel) => rel.type === type && rel.targetId === targetId).length >= 2) return 'Questa persona ha già due genitori biologici.'
+    const parent = findPerson(sourceId); const child = findPerson(targetId)
+    if (parent?.birthDate && child?.birthDate && parent.birthDate >= child.birthDate) return 'La data di nascita del genitore deve precedere quella del figlio.'
+  } else {
+    const pairExists = tree.value.relationships.some((rel) => !parentTypeValues.has(rel.type) && ((rel.sourceId === sourceId && rel.targetId === targetId) || (rel.sourceId === targetId && rel.targetId === sourceId)))
+    if (pairExists) return 'Esiste già un legame non genitoriale tra queste persone. Rimuovilo prima di cambiarne il tipo.'
+  }
+  if (relationshipForm.startDate && relationshipForm.endDate && relationshipForm.startDate > relationshipForm.endDate) return 'La data di fine deve essere successiva alla data di inizio.'
+  return null
+}
+function submitRelationship() {
+  relationshipError.value = validateRelationship() ?? ''
+  if (relationshipError.value) return
+  tree.value.relationships.push({ id: crypto.randomUUID(), ...relationshipForm })
+  modal.value = null
+  showToast('Legame aggiunto')
+  refit()
+}
+function askDeleteRelationship(id: string) {
+  pendingRelationshipId.value = id
+  modal.value = 'delete-relationship'
+}
+function confirmDeleteRelationship() {
+  if (!pendingRelationshipId.value) return
+  tree.value.relationships = tree.value.relationships.filter((relationship) => relationship.id !== pendingRelationshipId.value)
+  pendingRelationshipId.value = null
+  modal.value = null
+  showToast('Legame rimosso')
+  refit()
+}
+
+function selectNode(event: { node: Node }) {
+  selectedPersonId.value = event.node.id
+  if (layoutMode.value !== 'generational') refit()
+}
+function setLayoutMode(mode: LayoutMode) {
+  layoutMode.value = mode
+  if (!selectedPersonId.value) selectedPersonId.value = tree.value.people[0]?.id ?? null
+  refit()
+}
+function refit() {
+  if (!tree.value.people.length || activeView.value !== 'tree') return
+  nextTick(() => window.setTimeout(() => fitView({ padding: 0.18, duration: 500 }), 80))
+}
+
+async function saveFile() {
+  try {
+    await exportTree(tree.value)
+    showToast('Archivio .genia salvato')
+  } catch (error) {
+    if ((error as DOMException)?.name !== 'AbortError') showToast('Non è stato possibile salvare il file', 'error')
+  }
+}
+function chooseFile() { fileInput.value?.click() }
+async function openFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const imported = await importTree(file)
+    tree.value = imported
+    selectedPersonId.value = imported.people[0]?.id ?? null
+    activeView.value = 'tree'
+    showToast(`“${imported.name}” aperto`)
+    refit()
+  } catch (error) { showToast(error instanceof Error ? error.message : 'File non valido', 'error') }
+  input.value = ''
+}
+function createNewTree() {
+  tree.value = emptyTree()
+  selectedPersonId.value = null
+  activeView.value = 'tree'
+  modal.value = null
+  showToast('Nuovo albero creato')
+}
+watch(() => [tree.value.name, tree.value.people, tree.value.relationships], () => {
+  if (!hydrated.value) return
+  tree.value.updatedAt = new Date().toISOString()
+  saveState.value = 'saving'
+  window.clearTimeout(saveTimer)
+  saveTimer = window.setTimeout(async () => {
+    try { await saveLocal(tree.value); saveState.value = 'saved' } catch { saveState.value = 'error' }
+  }, 550)
+}, { deep: true })
+
+onMounted(async () => {
+  try {
+    const local = await loadLocal()
+    // Le vecchie installazioni potevano contenere un archivio dimostrativo.
+    // Non lo ripristiniamo: gli alberi reali hanno identificativi differenti.
+    if (local && local.id !== 'tree-moretti') tree.value = local
+  } catch { showToast('Salvataggio locale non disponibile', 'error') }
+  selectedPersonId.value = tree.value.people[0]?.id ?? null
+  hydrated.value = true
+  refit()
+})
+</script>
+
+<template>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="flex items-center gap-3">
+        <button class="icon-button mobile-menu" aria-label="Apri navigazione" @click="mobileNavOpen = !mobileNavOpen"><Menu :size="20" /></button>
+        <button class="brand" aria-label="Vai all’albero" @click="goTo('tree')"><span class="brand-mark">GL</span><span><strong>GeniaLogic</strong><small>Archivio di famiglia</small></span></button>
+      </div>
+      <div class="header-actions">
+        <span class="save-state" :class="saveState"><Check v-if="saveState === 'saved'" :size="13" /><span>{{ saveState === 'saving' ? 'Salvataggio…' : saveState === 'error' ? 'Errore salvataggio' : 'Salvato in locale' }}</span></span>
+        <button class="button subtle hide-small" @click="chooseFile"><FolderOpen :size="16" />Apri</button>
+        <button class="button subtle hide-small" @click="saveFile"><Save :size="16" />Salva file</button>
+        <button class="button primary" @click="openNewPerson"><Plus :size="17" />Persona</button>
+      </div>
+      <input ref="fileInput" class="sr-only" type="file" accept=".genia,application/x-genia-family-tree" @change="openFile" />
+    </header>
+
+    <aside class="sidebar" :class="{ open: mobileNavOpen }">
+      <div class="tree-heading">
+        <p class="eyebrow">Albero attivo</p>
+        <p class="tree-name">{{ tree.name }}</p>
+        <p>{{ tree.people.length }} persone · {{ tree.relationships.length }} legami</p>
+      </div>
+      <nav aria-label="Navigazione principale">
+        <button v-for="item in navItems" :key="item.id" :class="{ active: activeView === item.id }" @click="goTo(item.id)"><component :is="item.icon" :size="18" /><span>{{ item.label }}</span><ChevronRight :size="14" /></button>
+      </nav>
+      <div class="sidebar-note"><ShieldCheck :size="18" /><div><strong>Privato per natura</strong><p>I dati non lasciano mai questo dispositivo.</p></div></div>
+      <div class="sidebar-file-actions">
+        <button @click="chooseFile"><Upload :size="15" />Apri archivio</button>
+        <button @click="saveFile"><Download :size="15" />Esporta .genia</button>
+      </div>
+    </aside>
+    <button v-if="mobileNavOpen" class="nav-scrim" aria-label="Chiudi navigazione" @click="mobileNavOpen = false" />
+
+    <main class="main-area">
+      <template v-if="activeView === 'tree'">
+        <section class="view-toolbar tree-view-toolbar">
+          <div><p class="eyebrow">Visualizzazione</p><h1>Albero genealogico</h1><p>Esplora generazioni e legami nell’archivio “{{ tree.name }}”.</p></div>
+          <div class="tree-view-actions">
+            <div class="layout-switch" role="group" aria-label="Disposizione dell’albero">
+              <button type="button" :class="{ active: layoutMode === 'generational' }" title="Disponi per generazioni" @click="setLayoutMode('generational')"><GitFork :size="15" /><span>Generazioni</span></button>
+              <button type="button" :class="{ active: layoutMode === 'focus' }" title="Metti la persona selezionata al centro" @click="setLayoutMode('focus')"><Focus :size="15" /><span>Al centro</span></button>
+              <button type="button" :class="{ active: layoutMode === 'radial' }" title="Mostra il ventaglio degli antenati" @click="setLayoutMode('radial')"><CircleDot :size="15" /><span>Radiale</span></button>
+            </div>
+            <button class="button secondary" :disabled="tree.people.length < 2" @click="openRelationship()"><Link2 :size="16" />Aggiungi legame</button>
+          </div>
+        </section>
+        <section class="tree-workspace">
+          <div v-if="tree.people.length" class="flow-wrap" :class="{ 'radial-mode': layoutMode === 'radial' }">
+            <RadialTree v-if="layoutMode === 'radial'" :people="tree.people" :relationships="tree.relationships" :root-id="selectedPersonId ?? tree.people[0].id" @select-person="selectedPersonId = $event" @add-parent="openParentFromRadial" />
+            <VueFlow v-else :nodes="flowNodes" :edges="flowEdges" :min-zoom="0.18" :max-zoom="1.7" fit-view-on-init nodes-draggable :nodes-connectable="false" :elements-selectable="true" @node-click="selectNode">
+              <template #node-person="props"><PersonNode v-bind="props" @add-relative="openRelativeFor" /></template>
+              <Background pattern-color="#d7d2c7" :gap="20" :size="1" />
+              <Controls position="bottom-left" :show-interactive="false" />
+            </VueFlow>
+            <button v-if="layoutMode !== 'radial'" class="fit-button" title="Centra albero" aria-label="Centra albero" @click="refit"><Maximize2 :size="17" /></button>
+            <div v-if="layoutMode !== 'radial'" class="legend"><span><i class="parent-line" />Genitorialità</span><span><i class="sibling-line" />Fratelli</span><span><i class="couple-line" />Coppia</span><span><i class="ended-line" />Concluso</span></div>
+          </div>
+          <div v-else class="empty-state"><div class="empty-icon"><GitFork :size="28" /></div><p class="eyebrow">Un nuovo inizio</p><h2>Il tuo albero è ancora vuoto</h2><p>Aggiungi la prima persona. Potrai poi collegarla a genitori, figli e partner.</p><button class="button primary" @click="openNewPerson"><UserRoundPlus :size="17" />Aggiungi la prima persona</button></div>
+
+          <aside v-if="selectedPerson" class="inspector">
+            <div class="inspector-top"><p class="eyebrow">Scheda persona</p><button class="icon-button" aria-label="Chiudi scheda" @click="selectedPersonId = null"><X :size="17" /></button></div>
+            <div class="profile-head"><div class="profile-avatar" :style="{ background: selectedPerson.color }">{{ initials(selectedPerson) }}</div><div><h2>{{ fullName(selectedPerson) }}</h2><p>{{ lifeLabel(selectedPerson) }}</p></div></div>
+            <div class="profile-actions"><button @click="openEditPerson(selectedPerson)"><Edit3 :size="15" />Modifica</button><button @click="openRelationship(selectedPerson.id)"><Link2 :size="15" />Collega</button><button class="danger-icon" title="Elimina persona" aria-label="Elimina persona" @click="askDeletePerson(selectedPerson)"><Trash2 :size="15" /></button></div>
+            <button class="quick-relative-button" @click="openRelative"><UserRoundPlus :size="17" /><span><small>Nuova persona collegata</small>Aggiungi parente</span><ChevronRight :size="16" /></button>
+            <dl class="facts">
+              <div v-if="selectedPerson.birthDate"><dt><CalendarDays :size="14" />Nascita</dt><dd>{{ dateLabel(selectedPerson.birthDate) }}</dd></div>
+              <div v-if="selectedPerson.birthPlace"><dt><MapPin :size="14" />Luogo</dt><dd>{{ selectedPerson.birthPlace }}</dd></div>
+              <div v-if="selectedPerson.occupation"><dt>Professione</dt><dd>{{ selectedPerson.occupation }}</dd></div>
+              <div v-if="selectedPerson.birthName"><dt>Cognome alla nascita</dt><dd>{{ selectedPerson.birthName }}</dd></div>
+            </dl>
+            <div v-if="selectedPerson.notes" class="story"><p class="eyebrow">Memoria</p><p>“{{ selectedPerson.notes }}”</p></div>
+            <div class="person-links">
+              <p class="section-label">Legami</p>
+              <div v-for="rel in tree.relationships.filter(r => r.sourceId === selectedPerson!.id || r.targetId === selectedPerson!.id)" :key="rel.id" class="person-link-row">
+                <button class="person-link-main" @click="selectedPersonId = rel.sourceId === selectedPerson!.id ? rel.targetId : rel.sourceId"><span>{{ relationshipLabel(rel.type) }}</span><strong>{{ fullName(findPerson(rel.sourceId === selectedPerson!.id ? rel.targetId : rel.sourceId)) }}</strong><ChevronRight :size="13" /></button>
+                <button v-if="coupleTypeValues.has(rel.type)" class="person-link-add-child" :aria-label="`Aggiungi un discendente con ${fullName(findPerson(rel.sourceId === selectedPerson!.id ? rel.targetId : rel.sourceId))}`" title="Aggiungi figlio/a" @click="openCoupleChild(rel)"><UserRoundPlus :size="14" /></button>
+                <button class="person-link-delete" :aria-label="`Rimuovi legame con ${fullName(findPerson(rel.sourceId === selectedPerson!.id ? rel.targetId : rel.sourceId))}`" title="Rimuovi legame" @click="askDeleteRelationship(rel.id)"><Trash2 :size="14" /></button>
+              </div>
+              <p v-if="!tree.relationships.some(r => r.sourceId === selectedPerson!.id || r.targetId === selectedPerson!.id)" class="muted-empty">Nessun legame ancora.</p>
+            </div>
+          </aside>
+        </section>
+      </template>
+
+      <template v-else-if="activeView === 'people'">
+        <section class="view-toolbar"><div><p class="eyebrow">Indice</p><h1>Persone</h1><p>Tutte le persone custodite in questo archivio.</p></div><button class="button primary" @click="openNewPerson"><Plus :size="17" />Aggiungi persona</button></section>
+        <section class="content-panel">
+          <div class="list-toolbar"><label class="search-box"><Search :size="17" /><input v-model="search" type="search" placeholder="Cerca nome, cognome o luogo…" /></label><span><ListFilter :size="15" />{{ filteredPeople.length }} risultati</span></div>
+          <div v-if="filteredPeople.length" class="people-grid">
+            <article v-for="person in filteredPeople" :key="person.id" class="person-tile" @click="selectedPersonId = person.id; activeView = 'tree'">
+              <div class="tile-avatar" :style="{ background: person.color }">{{ initials(person) }}</div><div class="min-w-0"><h2>{{ fullName(person) }}</h2><p>{{ lifeLabel(person) }}<template v-if="person.birthPlace"> · {{ person.birthPlace }}</template></p><span v-if="person.occupation">{{ person.occupation }}</span></div>
+              <button class="icon-button" aria-label="Modifica persona" @click.stop="openEditPerson(person)"><MoreHorizontal :size="17" /></button>
+            </article>
+          </div>
+          <div v-else class="empty-small"><Users :size="28" /><h2>Nessuna persona trovata</h2><p>Prova a cambiare la ricerca oppure aggiungi una nuova persona.</p></div>
+        </section>
+      </template>
+
+      <template v-else-if="activeView === 'relationships'">
+        <section class="view-toolbar"><div><p class="eyebrow">Connessioni</p><h1>Legami</h1><p>Genitorialità e relazioni di coppia, anche nel tempo.</p></div><button class="button secondary" :disabled="tree.people.length < 2" @click="openRelationship()"><Plus :size="17" />Aggiungi legame</button></section>
+        <section class="content-panel relationship-list">
+          <article v-for="relationship in tree.relationships" :key="relationship.id" class="relationship-row">
+            <div class="relation-icon" :class="parentTypeValues.has(relationship.type) ? 'parent' : relationship.type === 'sibling' ? 'sibling' : 'couple'"><GitFork v-if="parentTypeValues.has(relationship.type)" :size="18" /><Users v-else-if="relationship.type === 'sibling'" :size="18" /><Heart v-else :size="18" /></div>
+            <div class="relation-people"><strong>{{ fullName(findPerson(relationship.sourceId)) }}</strong><span>{{ relationshipLabel(relationship.type) }}</span><strong>{{ fullName(findPerson(relationship.targetId)) }}</strong></div>
+            <div class="relation-dates"><span v-if="relationship.startDate">dal {{ dateLabel(relationship.startDate) }}</span><span v-if="relationship.endDate">al {{ dateLabel(relationship.endDate) }}</span></div>
+            <button v-if="coupleTypeValues.has(relationship.type)" class="add-child-button" type="button" :aria-label="`Aggiungi un discendente a ${fullName(findPerson(relationship.sourceId))} e ${fullName(findPerson(relationship.targetId))}`" @click="openCoupleChild(relationship)"><UserRoundPlus :size="16" /><span>Aggiungi figlio/a</span></button>
+            <button class="icon-button danger-icon" :aria-label="`Rimuovi legame ${relationshipLabel(relationship.type)} tra ${fullName(findPerson(relationship.sourceId))} e ${fullName(findPerson(relationship.targetId))}`" title="Rimuovi legame" @click="askDeleteRelationship(relationship.id)"><Trash2 :size="16" /></button>
+          </article>
+          <div v-if="!tree.relationships.length" class="empty-small"><Link2 :size="28" /><h2>Nessun legame</h2><p>Aggiungi almeno due persone, poi descrivi la loro relazione.</p></div>
+        </section>
+      </template>
+
+      <template v-else>
+        <section class="view-toolbar"><div><p class="eyebrow">Dati e sicurezza</p><h1>Archivio</h1><p>Gestisci il file esterno e la copia automatica su questo dispositivo.</p></div></section>
+        <section class="archive-grid">
+          <article class="archive-card featured"><div class="archive-card-icon"><Save :size="24" /></div><p class="eyebrow">Copia portatile</p><h2>Salva il tuo archivio</h2><p>Il formato <strong>.genia</strong> è compresso e non è leggibile direttamente in un editor di testo. Non è cifrato: conservalo in un luogo sicuro.</p><button class="button primary" @click="saveFile"><Download :size="16" />Salva file .genia</button></article>
+          <article class="archive-card"><div class="archive-card-icon"><FolderOpen :size="24" /></div><p class="eyebrow">Importazione</p><h2>Apri un archivio</h2><p>Carica un file .genia creato in precedenza. L’albero aperto sostituirà quello attualmente visibile.</p><button class="button secondary" @click="chooseFile"><Upload :size="16" />Scegli un file</button></article>
+          <article class="archive-card"><div class="archive-card-icon"><Edit3 :size="24" /></div><p class="eyebrow">Identità</p><h2>Nome dell’albero</h2><label class="field"><span>Nome archivio</span><input v-model.trim="tree.name" maxlength="80" /></label><p class="microcopy">Ultimo aggiornamento: {{ new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(tree.updatedAt)) }}</p></article>
+          <article class="archive-card danger-card"><div class="archive-card-icon"><FilePlus2 :size="24" /></div><p class="eyebrow">Riparti</p><h2>Nuovo albero</h2><p>Crea un archivio vuoto. Prima esporta quello attuale se vuoi conservarne una copia.</p><button class="button danger" @click="modal = 'new-tree'"><FilePlus2 :size="16" />Nuovo albero</button></article>
+        </section>
+      </template>
+    </main>
+
+    <ModalShell v-if="modal === 'person'" :title="editingPersonId ? 'Modifica persona' : 'Aggiungi una persona'" subtitle="Inserisci ciò che conosci: potrai completare la scheda in seguito." wide @close="modal = null">
+      <form class="form-grid" @submit.prevent="submitPerson">
+        <label class="field"><span>Nome *</span><input v-model="personForm.firstName" required autofocus maxlength="60" placeholder="es. Elena" /></label>
+        <label class="field"><span>Cognome *</span><input v-model="personForm.lastName" required maxlength="60" placeholder="es. Moretti" /></label>
+        <label class="field"><span>Cognome alla nascita</span><input v-model="personForm.birthName" maxlength="60" placeholder="Se diverso" /></label>
+        <label class="field"><span>Soprannome</span><input v-model="personForm.nickname" maxlength="60" /></label>
+        <label class="field"><span>Genere</span><select v-model="personForm.gender"><option value="unspecified">Non specificato</option><option value="female">Donna</option><option value="male">Uomo</option><option value="nonbinary">Non binario</option></select></label>
+        <label class="field"><span>Luogo di nascita</span><input v-model="personForm.birthPlace" maxlength="100" placeholder="Città o località" /></label>
+        <label class="field"><span>Data di nascita</span><input v-model="personForm.birthDate" type="date" /></label>
+        <label class="field"><span>Data di morte</span><input v-model="personForm.deathDate" type="date" :min="personForm.birthDate" /></label>
+        <label class="field full"><span>Professione o ruolo</span><input v-model="personForm.occupation" maxlength="100" /></label>
+        <label class="field full"><span>Ricordo o nota biografica</span><textarea v-model="personForm.notes" rows="3" maxlength="700" placeholder="Una storia, un dettaglio, qualcosa da ricordare…" /></label>
+        <fieldset class="color-field full"><legend>Colore della scheda</legend><button v-for="color in personColors" :key="color" type="button" :style="{ background: color }" :class="{ active: personForm.color === color }" :aria-label="`Scegli colore ${color}`" @click="personForm.color = color"><Check v-if="personForm.color === color" :size="15" /></button></fieldset>
+        <div class="form-actions full"><button type="button" class="button subtle" @click="modal = null">Annulla</button><button class="button primary" type="submit"><Check :size="16" />{{ editingPersonId ? 'Salva modifiche' : 'Aggiungi persona' }}</button></div>
+      </form>
+    </ModalShell>
+
+    <ModalShell v-if="modal === 'relative' && selectedPerson" :title="`Aggiungi un parente a ${selectedPerson.firstName}`" subtitle="Crea la persona e il legame in un solo passaggio." wide @close="modal = null">
+      <form class="relative-form" @submit.prevent="submitRelative">
+        <fieldset class="relative-types">
+          <legend>Chi vuoi aggiungere?</legend>
+          <button v-for="choice in relativeChoices" :key="choice.value" type="button" :class="{ active: relativeKind === choice.value }" @click="chooseRelative(choice.value)">
+            <span>{{ choice.label }}</span><small>{{ choice.description }}</small><Check v-if="relativeKind === choice.value" :size="16" />
+          </button>
+        </fieldset>
+        <div class="relative-summary"><UserRoundPlus :size="18" /><span>Stai aggiungendo <strong>{{ selectedRelativeChoice.label.toLowerCase() }}</strong> a <strong>{{ fullName(selectedPerson) }}</strong>.</span></div>
+        <div class="form-grid">
+          <label class="field"><span>Nome *</span><input v-model="relativeForm.firstName" required autofocus maxlength="60" placeholder="Nome" /></label>
+          <label class="field"><span>Cognome *</span><input v-model="relativeForm.lastName" required maxlength="60" placeholder="Cognome" /><small v-if="selectedRelativeChoice.copySurname" class="field-hint">Proposto da {{ selectedPerson.lastName }}: puoi cambiarlo.</small></label>
+          <label v-if="relativeKind === 'spouse' || relativeKind === 'partner'" class="field full"><span>Genere</span><select v-model="relativeForm.gender"><option value="unspecified">Non specificato</option><option value="female">Donna</option><option value="male">Uomo</option><option value="nonbinary">Non binario</option></select></label>
+          <label class="field"><span>Data di nascita</span><input v-model="relativeForm.birthDate" type="date" /></label>
+          <label class="field"><span>Luogo di nascita</span><input v-model="relativeForm.birthPlace" maxlength="100" placeholder="Città o località" /></label>
+          <fieldset class="color-field full"><legend>Colore della scheda</legend><button v-for="color in personColors" :key="color" type="button" :style="{ background: color }" :class="{ active: relativeForm.color === color }" :aria-label="`Scegli colore ${color}`" @click="relativeForm.color = color"><Check v-if="relativeForm.color === color" :size="15" /></button></fieldset>
+        </div>
+        <div class="form-actions"><button type="button" class="button subtle" @click="modal = null">Annulla</button><button class="button primary" type="submit"><UserRoundPlus :size="17" />Aggiungi {{ selectedRelativeChoice.label.toLowerCase() }}</button></div>
+      </form>
+    </ModalShell>
+
+    <ModalShell v-if="modal === 'couple-child' && pendingCouple" title="Aggiungi un discendente" subtitle="Crea la persona e collegala a entrambi i componenti della coppia." wide @close="modal = null; pendingCoupleId = null">
+      <form class="child-form" @submit.prevent="submitCoupleChild">
+        <div class="couple-summary">
+          <div class="couple-summary-icon"><Heart :size="18" /></div>
+          <div><span>Genitori</span><strong>{{ fullName(findPerson(pendingCouple.sourceId)) }} <small>e</small> {{ fullName(findPerson(pendingCouple.targetId)) }}</strong></div>
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>Nome *</span><input v-model="childForm.firstName" required autofocus maxlength="60" placeholder="Nome" /></label>
+          <label class="field"><span>Cognome *</span><input v-model="childForm.lastName" required maxlength="60" placeholder="Cognome" /><small class="field-hint">Suggerito in base ai genitori; puoi specificarne uno diverso.</small></label>
+          <label class="field"><span>Genere</span><select v-model="childForm.gender"><option value="unspecified">Non specificato</option><option value="female">Donna</option><option value="male">Uomo</option><option value="nonbinary">Non binario</option></select></label>
+          <label class="field"><span>Data di nascita</span><input v-model="childForm.birthDate" type="date" /></label>
+          <label class="field full"><span>Luogo di nascita</span><input v-model="childForm.birthPlace" maxlength="100" placeholder="Città o località" /></label>
+        </div>
+        <fieldset class="parentage-types">
+          <legend>Tipo di legame con ciascun genitore</legend>
+          <label class="field"><span>{{ fullName(findPerson(pendingCouple.sourceId)) }}</span><select v-model="childForm.firstParentType"><option value="biological-parent">Genitore biologico</option><option value="adoptive-parent">Genitore adottivo</option><option value="foster-parent">Genitore affidatario</option></select></label>
+          <label class="field"><span>{{ fullName(findPerson(pendingCouple.targetId)) }}</span><select v-model="childForm.secondParentType"><option value="biological-parent">Genitore biologico</option><option value="adoptive-parent">Genitore adottivo</option><option value="foster-parent">Genitore affidatario</option></select></label>
+        </fieldset>
+        <fieldset class="color-field"><legend>Colore della scheda</legend><button v-for="color in personColors" :key="color" type="button" :style="{ background: color }" :class="{ active: childForm.color === color }" :aria-label="`Scegli colore ${color}`" @click="childForm.color = color"><Check v-if="childForm.color === color" :size="15" /></button></fieldset>
+        <div class="form-actions"><button type="button" class="button subtle" @click="modal = null; pendingCoupleId = null">Annulla</button><button class="button primary" type="submit"><UserRoundPlus :size="17" />Aggiungi alla coppia</button></div>
+      </form>
+    </ModalShell>
+
+    <ModalShell v-if="modal === 'relationship'" title="Aggiungi un legame" subtitle="L’ordine delle persone conta per i legami di genitorialità." wide @close="modal = null">
+      <form class="relationship-form" @submit.prevent="submitRelationship">
+        <div class="relationship-picker-actions"><button type="button" class="button secondary" @click="swapRelationshipPeople"><ArrowLeftRight :size="18" />Inverti persone</button></div>
+        <div class="relationship-pair">
+          <PersonPicker v-model="relationshipForm.sourceId" :people="tree.people" label="Prima persona" />
+          <PersonPicker v-model="relationshipForm.targetId" :people="tree.people" label="Seconda persona" />
+        </div>
+        <p v-if="parentTypeValues.has(relationshipForm.type)" class="relationship-direction" aria-live="polite"><span>{{ relationshipForm.type === 'guardian' ? 'Tutore' : 'Genitore' }}: <strong>{{ fullName(findPerson(relationshipForm.sourceId)) }}</strong></span><ChevronRight :size="18" /><span>{{ relationshipForm.type === 'guardian' ? 'Persona tutelata' : 'Figlio/a' }}: <strong>{{ fullName(findPerson(relationshipForm.targetId)) }}</strong></span></p>
+        <fieldset class="relationship-types"><legend>Tipo di legame</legend><div v-for="group in relationshipGroups" :key="group.name"><p>{{ group.name }}</p><label v-for="option in group.options" :key="option.value" :class="{ active: relationshipForm.type === option.value }"><input v-model="relationshipForm.type" type="radio" :value="option.value" /><span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span><Check v-if="relationshipForm.type === option.value" :size="17" /></label></div></fieldset>
+        <div class="form-grid compact"><label class="field"><span>Data di inizio</span><input v-model="relationshipForm.startDate" type="date" /></label><label class="field"><span>Data di fine</span><input v-model="relationshipForm.endDate" type="date" /></label><label class="field full"><span>Nota sul legame</span><input v-model="relationshipForm.notes" maxlength="300" placeholder="Facoltativa" /></label></div>
+        <p v-if="relationshipError" class="form-error"><Info :size="16" />{{ relationshipError }}</p>
+        <div class="form-actions"><button type="button" class="button subtle" @click="modal = null">Annulla</button><button class="button primary" type="submit"><Link2 :size="16" />Aggiungi legame</button></div>
+      </form>
+    </ModalShell>
+
+    <ModalShell v-if="modal === 'delete-person' && selectedPerson" title="Eliminare questa persona?" subtitle="Verranno rimossi anche tutti i suoi legami." @close="modal = null"><div class="confirm-box"><div class="profile-avatar" :style="{ background: selectedPerson.color }">{{ initials(selectedPerson) }}</div><div><strong>{{ fullName(selectedPerson) }}</strong><p>{{ tree.relationships.filter(r => r.sourceId === selectedPerson!.id || r.targetId === selectedPerson!.id).length }} legami associati</p></div></div><div class="form-actions"><button class="button subtle" @click="modal = null">Annulla</button><button class="button danger" @click="deleteSelectedPerson"><Trash2 :size="16" />Elimina definitivamente</button></div></ModalShell>
+    <ModalShell v-if="modal === 'delete-relationship' && pendingRelationship" title="Rimuovere questo legame?" subtitle="Le persone resteranno nell’albero; verrà eliminata soltanto la relazione." @close="modal = null; pendingRelationshipId = null">
+      <div class="relationship-confirm">
+        <div class="relation-icon" :class="parentTypeValues.has(pendingRelationship.type) ? 'parent' : pendingRelationship.type === 'sibling' ? 'sibling' : 'couple'"><Link2 :size="18" /></div>
+        <div><span>{{ relationshipLabel(pendingRelationship.type) }}</span><strong>{{ fullName(findPerson(pendingRelationship.sourceId)) }} · {{ fullName(findPerson(pendingRelationship.targetId)) }}</strong></div>
+      </div>
+      <div class="form-actions"><button class="button subtle" @click="modal = null; pendingRelationshipId = null">Annulla</button><button class="button danger" @click="confirmDeleteRelationship"><Trash2 :size="16" />Rimuovi legame</button></div>
+    </ModalShell>
+    <ModalShell v-if="modal === 'new-tree'" title="Creare un nuovo albero?" subtitle="La copia locale attuale verrà sostituita." @close="modal = null"><div class="warning-note"><Info :size="19" /><p>Esporta prima un file .genia se vuoi conservare l’albero “{{ tree.name }}”.</p></div><div class="form-actions"><button class="button subtle" @click="modal = null">Torna indietro</button><button class="button danger" @click="createNewTree"><FilePlus2 :size="16" />Crea albero vuoto</button></div></ModalShell>
+
+    <Transition name="toast"><div v-if="toast" class="toast" :class="toast.tone"><Check v-if="toast.tone === 'success'" :size="17" /><Info v-else :size="17" />{{ toast.message }}</div></Transition>
+  </div>
+</template>
