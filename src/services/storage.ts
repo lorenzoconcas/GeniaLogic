@@ -49,9 +49,18 @@ async function encodeTree(tree: FamilyTree): Promise<Blob> {
 }
 
 async function decodeTree(file: File): Promise<FamilyTree> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
+  let bytes: Uint8Array
+  try {
+    bytes = new Uint8Array(await file.arrayBuffer())
+  } catch {
+    throw new Error('Non riesco a leggere il file. Se è nel cloud, scaricalo sul dispositivo e riprova.')
+  }
   const validMagic = MAGIC.every((byte, index) => bytes[index] === byte)
   if (!validMagic) throw new Error('Questo non sembra un file GeniaLogic valido.')
+
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('Questo browser non supporta l’apertura degli archivi compressi. Aggiorna il browser o il sistema operativo e riprova.')
+  }
 
   let raw: ArrayBuffer
   try {

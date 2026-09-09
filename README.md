@@ -48,3 +48,14 @@ Il formato `.genia` contiene dati JSON compressi con Gzip e un'intestazione prop
 La pubblicazione rende accessibile l’app, ma non carica gli alberi su GitHub.
 Il sito pubblicato e `localhost` hanno archivi del browser separati: per spostare
 il tuo albero, esporta il file `.genia` da localhost e importalo nel sito pubblicato.
+
+### Aprire un archivio su iPhone e iPad
+
+Apri GeniaLogic nel browser e usa **Archivio → Scegli un file** (oppure **Apri
+archivio** dal menu). Nel selettore File scegli il documento `.genia`.
+Il selettore mostra tutti i formati per consentire a iOS/iPadOS di selezionare
+anche questa estensione personalizzata; GeniaLogic controlla il contenuto prima
+di importarlo. Non occorre rinominare il file.
+
+Se un provider cloud non rende leggibile il documento, scaricalo o copialo in
+**Su iPhone / Su iPad** nell’app File, poi seleziona la copia locale.

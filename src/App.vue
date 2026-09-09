@@ -460,7 +460,12 @@ async function saveFile() {
     if ((error as DOMException)?.name !== 'AbortError') showToast('Non è stato possibile salvare il file', 'error')
   }
 }
-function chooseFile() { fileInput.value?.click() }
+function chooseFile() {
+  const input = fileInput.value
+  if (!input) return
+  input.value = ''
+  input.click()
+}
 async function openFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -518,7 +523,9 @@ onMounted(async () => {
         <button class="button subtle hide-small" @click="saveFile"><Save :size="16" />Salva file</button>
         <button class="button primary" @click="openNewPerson"><Plus :size="17" />Persona</button>
       </div>
-      <input ref="fileInput" class="sr-only" type="file" accept=".genia,application/x-genia-family-tree" @change="openFile" />
+      <!-- iOS/iPadOS may disable custom file extensions in Files when accept is set.
+           Import validates the binary header and archive contents instead of the MIME type. -->
+      <input ref="fileInput" class="sr-only" type="file" aria-label="Apri archivio GeniaLogic (.genia)" @change="openFile" />
     </header>
 
     <aside class="sidebar" :class="{ open: mobileNavOpen }">
