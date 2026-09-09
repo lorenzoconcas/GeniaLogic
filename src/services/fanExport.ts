@@ -37,7 +37,7 @@ function personLabel(person: Person, measure: MeasureText) {
 }
 
 export function createFanExport(root: Person, slots: ExportSlot[], generations: number, groups: RelativeGroup[], measure: MeasureText) {
-  if (!Number.isInteger(generations) || generations < 1 || generations > 6) throw new Error('Numero di generazioni non valido.')
+  if (!Number.isInteger(generations) || generations < 1 || generations > 10) throw new Error('Numero di generazioni non valido.')
   const rootLabel = personLabel(root, measure)
   const rootRadius = Math.max(110, Math.hypot(rootLabel.width / 2, rootLabel.height / 2) + padding)
   let radius = rootRadius + 10
@@ -105,7 +105,7 @@ export function createFanExport(root: Person, slots: ExportSlot[], generations: 
 export function pngScale(width: number, height: number) {
   // Bound mobile canvas memory without making text smaller than its designed size.
   const scale = Math.min(2, 8192 / width, 8192 / height, Math.sqrt(16_000_000 / (width * height)))
-  if (scale < 1) throw new Error('Questo ventaglio è troppo grande per un PNG leggibile. Esportalo in SVG oppure riduci le generazioni.')
+  if (scale < 1) throw new Error('Questo grafico è troppo grande per un PNG leggibile. Esportalo in SVG oppure riduci le generazioni.')
   return scale
 }
 

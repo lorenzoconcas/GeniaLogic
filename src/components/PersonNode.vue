@@ -3,7 +3,7 @@ import { Handle, Position } from '@vue-flow/core'
 import { CalendarDays, MapPin, Plus } from '@lucide/vue'
 import type { Person } from '../types'
 
-defineProps<{ data: { person: Person; selected: boolean } }>()
+defineProps<{ data: { person: Person; selected: boolean; highlighted?: boolean } }>()
 const emit = defineEmits<{ addRelative: [personId: string] }>()
 
 function years(person: Person) {
@@ -18,7 +18,8 @@ function initials(person: Person) {
 </script>
 
 <template>
-  <div class="flow-person" :class="{ selected: data.selected }">
+  <div class="flow-person" :class="{ selected: data.selected, 'search-highlighted': data.highlighted }">
+    <span v-if="data.highlighted" class="flow-search-badge">Persona trovata</span>
     <Handle id="target-top" type="target" :position="Position.Top" />
     <Handle id="source-left" type="source" :position="Position.Left" class="side-handle" />
     <Handle id="source-right" type="source" :position="Position.Right" class="side-handle" />

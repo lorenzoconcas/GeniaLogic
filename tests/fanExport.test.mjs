@@ -9,8 +9,8 @@ const { createFanExport, pngScale, fanPng, downloadFan } = await import(`data:te
 const measure = (text, size) => [...text].length * size * .6
 const person = (id, firstName = 'Maria Angela', lastName = 'Concas') => ({ id, firstName, lastName, gender: 'female', color: '#5657d9', birthDate: '1920-02-03' })
 
-test('all names stay inside the rays and arcs for 3–6 full generations', () => {
-  for (let count = 3; count <= 6; count++) {
+test('all names stay inside the rays and arcs for 3–10 full generations', () => {
+  for (let count = 3; count <= 10; count++) {
     const slots = []
     for (let generation = 1; generation <= count; generation++) {
       for (let index = 0; index < 2 ** generation; index++) slots.push({ generation, index, person: person(`${generation}-${index}`, 'Giovanni Antonio', 'Della Rocca Concas') })
@@ -27,9 +27,15 @@ test('all names stay inside the rays and arcs for 3–6 full generations', () =>
         assert.ok(Math.hypot(far, slot.label.height / 2) < ring.outer)
       }
     }
-    const scale = pngScale(chart.width, chart.height)
-    assert.ok(scale >= 1 && scale <= 2)
-    assert.ok(chart.width * chart.height * scale ** 2 <= 16_000_001)
+    assert.ok(chart.svg.includes(`${count} generazioni di antenati`))
+    assert.ok(!chart.svg.includes('NaN'))
+    if (count <= 6) {
+      const scale = pngScale(chart.width, chart.height)
+      assert.ok(scale >= 1 && scale <= 2)
+      assert.ok(chart.width * chart.height * scale ** 2 <= 16_000_001)
+    } else {
+      assert.throws(() => pngScale(chart.width, chart.height), /SVG/)
+    }
   }
 })
 
@@ -56,7 +62,7 @@ test('empty ancestor slots and very large PNGs have explicit behavior', () => {
   assert.ok(chart.svg.includes('Maria Angela'))
   assert.ok(Number.isFinite(chart.width) && Number.isFinite(chart.height))
   assert.throws(() => pngScale(10_000, 10_000), /SVG/)
-  assert.throws(() => createFanExport(person('root'), [], 7, [], measure), /generazioni/)
+  assert.throws(() => createFanExport(person('root'), [], 11, [], measure), /generazioni/)
 })
 
 test('PNG conversion returns the encoded blob and cleans up resources on success and failure', async () => {

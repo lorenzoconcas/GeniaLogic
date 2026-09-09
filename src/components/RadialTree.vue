@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ArrowLeft, ChevronDown, ChevronRight, Plus } from '@lucide/vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { ArrowLeft, ChevronDown, ChevronRight, Maximize2, Minus, Plus } from '@lucide/vue'
 import type { Gender, Person, Relationship } from '../types'
 import { closeRelatives } from '../services/closeRelatives'
 import { createFanExport, downloadFan, fanPng } from '../services/fanExport'
+import { fanNavigationModifier, fanWheelFactor, maxFanZoom, panFanCamera, zoomFanCamera, type FanCamera } from '../services/fanViewport'
 
 const props = defineProps<{
   people: Person[]
@@ -26,6 +27,7 @@ type FanSlot = {
 }
 
 const generations = ref(5)
+const navigationModifier = fanNavigationModifier(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent)
 const exporting = ref(false)
 const exportMessage = ref('')
 const exportFailed = ref(false)
@@ -95,6 +97,91 @@ const canvasWidth = computed(() => outerRadius.value * 2 + 90)
 const canvasHeight = computed(() => outerRadius.value + rootRadius + 88)
 const centerX = computed(() => canvasWidth.value / 2)
 const centerY = computed(() => outerRadius.value + 38)
+const fanSvg = ref<SVGSVGElement | null>(null)
+const camera = ref<FanCamera>({ x: 0, y: 0, zoom: 1 })
+const dragging = ref(false)
+let drag: { pointerId: number; camera: FanCamera; start: DOMPoint; inverse: DOMMatrix } | null = null
+let suppressClick = false
+const fanViewBox = computed(() => `${camera.value.x} ${camera.value.y} ${canvasWidth.value / camera.value.zoom} ${canvasHeight.value / camera.value.zoom}`)
+
+function endPan(event?: PointerEvent) {
+  if (event && event.pointerId !== drag?.pointerId) return
+  const pointerId = drag?.pointerId
+  drag = null
+  dragging.value = false
+  if (pointerId !== undefined && fanSvg.value?.hasPointerCapture(pointerId)) fanSvg.value.releasePointerCapture(pointerId)
+}
+
+function resetCamera() {
+  endPan()
+  camera.value = { x: 0, y: 0, zoom: 1 }
+}
+watch([() => props.rootId, generations], resetCamera)
+onBeforeUnmount(() => endPan())
+
+function zoomBy(factor: number) {
+  endPan()
+  camera.value = zoomFanCamera(camera.value, canvasWidth.value, canvasHeight.value, factor)
+}
+
+function wheelZoom(event: WheelEvent) {
+  if (!event[navigationModifier.key]) return
+  event.preventDefault()
+  if (drag) return
+  const matrix = fanSvg.value?.getScreenCTM()
+  if (!matrix) return
+  const anchor = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+  camera.value = zoomFanCamera(camera.value, canvasWidth.value, canvasHeight.value,
+    fanWheelFactor(event.deltaY, event.deltaMode, fanSvg.value!.clientHeight), anchor)
+}
+
+function startPan(event: PointerEvent) {
+  suppressClick = false
+  if (!event[navigationModifier.key] || event.button !== 0 || drag) return
+  const svg = fanSvg.value
+  const matrix = svg?.getScreenCTM()
+  if (!svg || !matrix) return
+  event.preventDefault()
+  const inverse = matrix.inverse()
+  drag = { pointerId: event.pointerId, camera: { ...camera.value }, start: new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse), inverse }
+  suppressClick = true
+  dragging.value = true
+  svg.setPointerCapture(event.pointerId)
+}
+
+function movePan(event: PointerEvent) {
+  if (!drag || event.pointerId !== drag.pointerId) return
+  event.preventDefault()
+  const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(drag.inverse)
+  camera.value = panFanCamera(drag.camera, drag.start, point)
+}
+
+function guardClick(event: MouseEvent) {
+  if (!event[navigationModifier.key] && !suppressClick) return
+  suppressClick = false
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function preventPanMenu(event: MouseEvent) {
+  if (event[navigationModifier.key] || drag || suppressClick) event.preventDefault()
+}
+
+function keyboardNavigate(event: KeyboardEvent) {
+  if (event.key === 'Escape') { endPan(); return }
+  if (event.target !== event.currentTarget) return
+  const stepX = canvasWidth.value / camera.value.zoom * .1
+  const stepY = canvasHeight.value / camera.value.zoom * .1
+  if (event.key === '+' || event.key === '=') zoomBy(1.3)
+  else if (event.key === '-') zoomBy(1 / 1.3)
+  else if (event.key === '0') resetCamera()
+  else if (event.key === 'ArrowLeft') camera.value = { ...camera.value, x: camera.value.x - stepX }
+  else if (event.key === 'ArrowRight') camera.value = { ...camera.value, x: camera.value.x + stepX }
+  else if (event.key === 'ArrowUp') camera.value = { ...camera.value, y: camera.value.y - stepY }
+  else if (event.key === 'ArrowDown') camera.value = { ...camera.value, y: camera.value.y + stepY }
+  else return
+  event.preventDefault()
+}
 
 function parentsOf(childId: string) {
   const parents = props.relationships
@@ -187,16 +274,23 @@ function addMissingParent(slot: FanSlot) {
     <header class="radial-toolbar">
       <button class="radial-back" type="button" :disabled="!previousPerson" :title="previousPerson ? `Torna a ${previousPerson.firstName} ${previousPerson.lastName}` : 'Nessuna persona precedente'" aria-label="Indietro nella vista radiale" @click="goBack"><ArrowLeft :size="18" />Indietro</button>
       <div><span>Persona al centro</span><strong>{{ rootPerson ? `${rootPerson.firstName} ${rootPerson.lastName}` : 'Nessuna persona' }}</strong></div>
-      <label><span>Generazioni</span><span class="generation-select"><select v-model.number="generations"><option v-for="count in [3, 4, 5, 6]" :key="count" :value="count">{{ count }}</option></select><ChevronDown :size="14" /></span></label>
+      <label><span>Generazioni</span><span class="generation-select"><select v-model.number="generations"><option v-for="count in [3, 4, 5, 6, 7, 8, 9, 10]" :key="count" :value="count">{{ count }}</option></select><ChevronDown :size="14" /></span></label>
       <fieldset class="fan-export" :disabled="exporting || !rootPerson">
         <legend>Esporta ventaglio</legend>
         <button type="button" title="Esporta un PNG ad alta risoluzione con nomi completi" @click="exportFan('png')">PNG</button>
         <button type="button" title="Esporta un SVG vettoriale con nomi completi, ingrandibile senza perdita di qualità" @click="exportFan('svg')">SVG</button>
       </fieldset>
+      <fieldset class="fan-export fan-navigation">
+        <legend>Navigazione · {{ Math.round(camera.zoom * 100) }}%</legend>
+        <button type="button" :disabled="camera.zoom <= 1" aria-label="Riduci zoom del ventaglio" @click="zoomBy(1 / 1.3)"><Minus :size="18" /></button>
+        <button type="button" :disabled="camera.zoom >= maxFanZoom" aria-label="Aumenta zoom del ventaglio" @click="zoomBy(1.3)"><Plus :size="18" /></button>
+        <button type="button" title="Adatta alla vista" aria-label="Adatta il ventaglio alla vista" @click="resetCamera"><Maximize2 :size="18" /></button>
+      </fieldset>
+      <p class="fan-navigation-hint">{{ navigationModifier.label }} + rotellina: zoom · {{ navigationModifier.label }} + trascinamento: sposta · Tastiera sul grafico: frecce, +, − e 0.</p>
       <p v-if="exporting || exportMessage" class="export-message" :class="{ 'export-error': exportFailed }" role="status" aria-live="polite">{{ exporting ? 'Preparazione del ventaglio…' : exportMessage }}</p>
     </header>
 
-    <svg v-if="rootPerson" class="fan-canvas" :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`" preserveAspectRatio="xMidYMax meet" role="img" :aria-label="`Ventaglio degli antenati di ${rootPerson.firstName} ${rootPerson.lastName}`">
+    <svg v-if="rootPerson" ref="fanSvg" class="fan-canvas" :class="{ 'fan-dragging': dragging }" :viewBox="fanViewBox" preserveAspectRatio="xMidYMax meet" role="group" tabindex="0" :aria-label="`Ventaglio degli antenati di ${rootPerson.firstName} ${rootPerson.lastName}. ${navigationModifier.label} più rotellina per zoom, ${navigationModifier.label} più trascinamento per spostare.`" @wheel="wheelZoom" @pointerdown.capture="startPan" @pointermove="movePan" @pointerup="endPan" @pointercancel="endPan" @lostpointercapture="endPan" @click.capture="guardClick" @contextmenu="preventPanMenu" @keydown="keyboardNavigate">
       <g v-for="slot in slots.filter(item => item.generation > 0)" :key="`${slot.generation}-${slot.index}`" class="fan-segment" :class="{ empty: !slot.person, actionable: !slot.person && slot.childId }">
         <path :d="geometry(slot).path" :fill="segmentFill(slot)" :stroke="segmentStroke(slot)" stroke-width="1.5" />
         <g v-if="slot.person" class="fan-person" tabindex="0" role="button" :aria-label="`Metti al centro ${slot.person.firstName} ${slot.person.lastName}`" :transform="`translate(${geometry(slot).labelX} ${geometry(slot).labelY}) rotate(${geometry(slot).rotation})`" @click="emit('selectPerson', slot.person.id)" @keydown.enter.prevent="emit('selectPerson', slot.person.id)" @keydown.space.prevent="emit('selectPerson', slot.person.id)">
@@ -237,6 +331,9 @@ function addMissingParent(slot: FanSlot) {
 .fan-export button { min-height:2.5rem; padding:.45rem .7rem; border:1px solid #d8dbea; border-radius:.5rem; color:#4546bc; background:#f7f8fc; font-size:.875rem; font-weight:750; cursor:pointer; }
 .fan-export button:hover { background:#eeeeff; }
 .fan-export button:focus-visible { outline:2px solid #5657d9; outline-offset:2px; }
+.fan-navigation button { display:grid; place-items:center; min-width:2.5rem; }
+.fan-navigation button:disabled { opacity:.45; cursor:default; }
+.fan-navigation-hint { flex-basis:100%; margin:0; font-size:.875rem; line-height:1.4; color:#596176; }
 .fan-export:disabled { opacity:.5; }
 .fan-export:disabled button { cursor:wait; }
 .export-message { flex-basis:100%; margin:0; color:#4546bc; font-size:.875rem; overflow-wrap:anywhere; }
@@ -251,7 +348,9 @@ function addMissingParent(slot: FanSlot) {
 .generation-select { position:relative; display:flex; align-items:center; }
 .generation-select select { appearance:none; min-width:3.2rem; border:1px solid #d8dbea; border-radius:.5rem; background:#f7f8fc; padding:.38rem 1.35rem .38rem .55rem; color:#35394d; font-size:.72rem; font-weight:800; outline:none; cursor:pointer; }
 .generation-select svg { position:absolute; right:.35rem; color:#73798c; pointer-events:none; }
-.fan-canvas { display:block; width:100%; height:100%; min-height:0; padding:.4rem .7rem .2rem; }
+.fan-canvas { display:block; width:100%; height:100%; min-height:0; padding:.4rem .7rem .2rem; overflow:hidden; user-select:none; }
+.fan-canvas:focus-visible { outline:2px solid #7778df; outline-offset:-3px; }
+.fan-canvas.fan-dragging,.fan-canvas.fan-dragging * { cursor:grabbing!important; }
 .fan-relatives { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.75rem; border-top:1px solid #dfe3ed; padding:.8rem; background:rgba(255,255,255,.94); }
 .fan-relative-group { min-width:0; }
 .fan-relative-group h3 { display:flex; align-items:center; gap:.5rem; margin:0 0 .5rem; color:#363b54; font-size:.875rem; font-weight:800; }

@@ -12,16 +12,19 @@ import ModalShell from './components/ModalShell.vue'
 import PersonNode from './components/PersonNode.vue'
 import RadialTree from './components/RadialTree.vue'
 import PersonPicker from './components/PersonPicker.vue'
+import GraphPersonSearch from './components/GraphPersonSearch.vue'
+import AncestorTree from './components/AncestorTree.vue'
 import { emptyTree, personColors, relationshipOptions } from './data'
 import { exportTree, importTree, loadLocal, saveLocal } from './services/storage'
 import { generationLayout } from './services/generationLayout'
+import { quickChildRelationships, singleSpouse } from './services/quickChild'
 import type { FamilyTree, Gender, Person, Relationship, RelationshipType } from './types'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 
 type ViewName = 'tree' | 'people' | 'relationships' | 'archive'
-type LayoutMode = 'generational' | 'focus' | 'radial'
+type LayoutMode = 'generational' | 'focus' | 'radial' | 'ancestors'
 type PersonForm = Omit<Person, 'id'>
 type RelativeKind = 'father' | 'mother' | 'son' | 'daughter' | 'brother' | 'sister' | 'spouse' | 'partner'
 type ParentLinkType = 'biological-parent' | 'adoptive-parent' | 'foster-parent'
@@ -30,6 +33,8 @@ const tree = ref<FamilyTree>(emptyTree())
 const activeView = ref<ViewName>('tree')
 const layoutMode = ref<LayoutMode>('generational')
 const selectedPersonId = ref<string | null>(null)
+const highlightedPersonId = ref<string | null>(null)
+let viewportRequest = 0
 const search = ref('')
 const mobileNavOpen = ref(false)
 const sidebarCollapsed = ref(false)
@@ -57,8 +62,8 @@ const relationshipForm = reactive<{ sourceId: string; targetId: string; type: Re
   sourceId: '', targetId: '', type: 'biological-parent', startDate: '', endDate: '', notes: '',
 })
 const relativeKind = ref<RelativeKind>('father')
-const relativeForm = reactive<{ firstName: string; lastName: string; gender: Gender; birthDate: string; birthPlace: string; color: string }>({
-  firstName: '', lastName: '', gender: 'male', birthDate: '', birthPlace: '', color: personColors[0],
+const relativeForm = reactive<{ firstName: string; lastName: string; gender: Gender; birthDate: string; deathDate: string; birthPlace: string; color: string }>({
+  firstName: '', lastName: '', gender: 'male', birthDate: '', deathDate: '', birthPlace: '', color: personColors[0],
 })
 const childForm = reactive<{ firstName: string; lastName: string; gender: Gender; birthDate: string; birthPlace: string; color: string; firstParentType: ParentLinkType; secondParentType: ParentLinkType }>({
   firstName: '', lastName: '', gender: 'unspecified', birthDate: '', birthPlace: '', color: personColors[0], firstParentType: 'biological-parent', secondParentType: 'biological-parent',
@@ -88,6 +93,10 @@ const selectedPerson = computed(() => tree.value.people.find((person) => person.
 const pendingRelationship = computed(() => tree.value.relationships.find((relationship) => relationship.id === pendingRelationshipId.value) ?? null)
 const pendingCouple = computed(() => tree.value.relationships.find((relationship) => relationship.id === pendingCoupleId.value) ?? null)
 const selectedRelativeChoice = computed(() => relativeChoices.find((choice) => choice.value === relativeKind.value)!)
+const automaticChildSpouse = computed(() => {
+  if (!selectedPersonId.value || (relativeKind.value !== 'son' && relativeKind.value !== 'daughter')) return undefined
+  return singleSpouse(selectedPersonId.value, tree.value.people, tree.value.relationships)
+})
 const filteredPeople = computed(() => {
   const term = search.value.trim().toLocaleLowerCase('it')
   if (!term) return tree.value.people
@@ -104,7 +113,8 @@ function flowNode(person: Person, x: number, y: number): Node {
     id: person.id,
     type: 'person',
     position: { x: x - nodeWidth / 2, y: y - nodeHeight / 2 },
-    data: { person, selected: selectedPersonId.value === person.id },
+    data: { person, selected: selectedPersonId.value === person.id, highlighted: highlightedPersonId.value === person.id },
+    zIndex: highlightedPersonId.value === person.id ? 100 : 0,
   }
 }
 
@@ -261,6 +271,7 @@ function openRelative() {
     lastName: selectedPerson.value.lastName,
     gender: 'male' as Gender,
     birthDate: '',
+    deathDate: '',
     birthPlace: '',
     color: personColors[tree.value.people.length % personColors.length],
   })
@@ -290,7 +301,7 @@ function submitRelative() {
   if (!reference || !relativeForm.firstName.trim() || !relativeForm.lastName.trim()) return
   const newPerson: Person = {
     id: crypto.randomUUID(), firstName: relativeForm.firstName.trim(), lastName: relativeForm.lastName.trim(),
-    gender: relativeForm.gender, birthDate: relativeForm.birthDate, birthPlace: relativeForm.birthPlace.trim(),
+    gender: relativeForm.gender, birthDate: relativeForm.birthDate, deathDate: relativeForm.deathDate, birthPlace: relativeForm.birthPlace.trim(),
     color: relativeForm.color,
   }
   const makeRelationship = (sourceId: string, targetId: string, type: RelationshipType): Relationship => ({
@@ -300,7 +311,7 @@ function submitRelative() {
   if (relativeKind.value === 'father' || relativeKind.value === 'mother') {
     links.push(makeRelationship(newPerson.id, reference.id, 'biological-parent'))
   } else if (relativeKind.value === 'son' || relativeKind.value === 'daughter') {
-    links.push(makeRelationship(reference.id, newPerson.id, 'biological-parent'))
+    links.push(...quickChildRelationships(reference.id, newPerson.id, tree.value.people, tree.value.relationships))
   } else if (relativeKind.value === 'brother' || relativeKind.value === 'sister') {
     const knownParents = tree.value.relationships.filter((relationship) => sharedParentTypeValues.has(relationship.type) && relationship.targetId === reference.id)
     if (knownParents.length) {
@@ -447,6 +458,7 @@ function confirmDeleteRelationship() {
 }
 
 function selectNode(event: { node: Node }) {
+  viewportRequest++
   selectedPersonId.value = event.node.id
   if (layoutMode.value !== 'generational') refit()
 }
@@ -456,9 +468,33 @@ function setLayoutMode(mode: LayoutMode) {
   refit()
 }
 function refit() {
-  if (!tree.value.people.length || activeView.value !== 'tree') return
-  nextTick(() => window.setTimeout(() => fitView({ padding: 0.18, duration: 500 }), 80))
+  const request = ++viewportRequest
+  if (!tree.value.people.length || !graphVisible()) return
+  nextTick(() => window.setTimeout(() => {
+    if (request === viewportRequest) void fitView({ padding: 0.18, duration: 500 })
+  }, 80))
 }
+
+function graphVisible() { return activeView.value === 'tree' && (layoutMode.value === 'generational' || layoutMode.value === 'focus') }
+
+async function revealPerson(personId: string) {
+  if (!findPerson(personId) || !graphVisible()) return
+  const request = ++viewportRequest
+  selectedPersonId.value = personId
+  highlightedPersonId.value = personId
+  // Allow the focus layout, inspector and Vue Flow's ResizeObserver to settle.
+  await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  await nextTick()
+  if (request !== viewportRequest || !graphVisible() || selectedPersonId.value !== personId) return
+  const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 450
+  const centered = await fitView({ nodes: [personId], padding: .5, maxZoom: 1.15, duration })
+  if (!centered && request === viewportRequest) showToast('Persona selezionata. Usa “Centra albero” per ritrovarla.', 'error')
+}
+
+watch(selectedPersonId, (id) => {
+  if (highlightedPersonId.value !== id) highlightedPersonId.value = null
+})
 
 async function saveFile() {
   try {
@@ -564,20 +600,25 @@ onMounted(async () => {
               <button type="button" :class="{ active: layoutMode === 'generational' }" title="Disponi per generazioni" @click="setLayoutMode('generational')"><GitFork :size="15" /><span>Generazioni</span></button>
               <button type="button" :class="{ active: layoutMode === 'focus' }" title="Metti la persona selezionata al centro" @click="setLayoutMode('focus')"><Focus :size="15" /><span>Al centro</span></button>
               <button type="button" :class="{ active: layoutMode === 'radial' }" title="Mostra il ventaglio degli antenati" @click="setLayoutMode('radial')"><CircleDot :size="15" /><span>Radiale</span></button>
+              <button type="button" :class="{ active: layoutMode === 'ancestors' }" title="Mostra solo gli antenati" @click="setLayoutMode('ancestors')"><GitFork :size="15" /><span>Antenati</span></button>
             </div>
             <button class="button secondary" :disabled="tree.people.length < 2" @click="openRelationship()"><Link2 :size="16" />Aggiungi legame</button>
           </div>
         </section>
         <section class="tree-workspace">
-          <div v-if="tree.people.length" class="flow-wrap" :class="{ 'radial-mode': layoutMode === 'radial' }">
+          <div v-if="tree.people.length" class="flow-wrap" :class="{ 'radial-mode': layoutMode === 'radial' || layoutMode === 'ancestors' }">
+            <div v-if="graphVisible()" class="graph-search-toolbar">
+              <GraphPersonSearch :key="tree.id" :people="tree.people" :selected-id="selectedPersonId" @select-person="revealPerson" />
+              <button class="fit-button" title="Centra albero" aria-label="Centra albero" @click="refit"><Maximize2 :size="17" /></button>
+            </div>
             <RadialTree v-if="layoutMode === 'radial'" :people="tree.people" :relationships="tree.relationships" :root-id="selectedPersonId ?? tree.people[0].id" @select-person="selectedPersonId = $event" @add-parent="openParentFromRadial" />
+            <AncestorTree v-else-if="layoutMode === 'ancestors'" :key="tree.id" :people="tree.people" :relationships="tree.relationships" :root-id="selectedPersonId ?? tree.people[0].id" @select-person="selectedPersonId = $event" />
             <VueFlow v-else :nodes="flowNodes" :edges="flowEdges" :min-zoom="0.18" :max-zoom="1.7" fit-view-on-init nodes-draggable :nodes-connectable="false" :elements-selectable="true" @node-click="selectNode">
               <template #node-person="props"><PersonNode v-bind="props" @add-relative="openRelativeFor" /></template>
               <Background pattern-color="#d7d2c7" :gap="20" :size="1" />
               <Controls position="bottom-left" :show-interactive="false" />
             </VueFlow>
-            <button v-if="layoutMode !== 'radial'" class="fit-button" title="Centra albero" aria-label="Centra albero" @click="refit"><Maximize2 :size="17" /></button>
-            <div v-if="layoutMode !== 'radial'" class="legend"><span><i class="parent-line" />Genitorialità</span><span><i class="sibling-line" />Fratelli</span><span><i class="couple-line" />Coppia</span><span><i class="ended-line" />Concluso</span></div>
+            <div v-if="graphVisible()" class="legend"><span><i class="parent-line" />Genitorialità</span><span><i class="sibling-line" />Fratelli</span><span><i class="couple-line" />Coppia</span><span><i class="ended-line" />Concluso</span></div>
           </div>
           <div v-else class="empty-state"><div class="empty-icon"><GitFork :size="28" /></div><p class="eyebrow">Un nuovo inizio</p><h2>Il tuo albero è ancora vuoto</h2><p>Aggiungi la prima persona. Potrai poi collegarla a genitori, figli e partner.</p><button class="button primary" @click="openNewPerson"><UserRoundPlus :size="17" />Aggiungi la prima persona</button></div>
 
@@ -671,12 +712,14 @@ onMounted(async () => {
           </button>
         </fieldset>
         <div class="relative-summary"><UserRoundPlus :size="18" /><span>Stai aggiungendo <strong>{{ selectedRelativeChoice.label.toLowerCase() }}</strong> a <strong>{{ fullName(selectedPerson) }}</strong>.</span></div>
+        <div v-if="automaticChildSpouse" class="relative-summary" role="status"><Users :size="18" /><span>Il coniuge <strong>{{ fullName(automaticChildSpouse) }}</strong> verrà collegato automaticamente come secondo genitore biologico.</span></div>
         <div class="form-grid">
           <label class="field"><span>Nome *</span><input v-model="relativeForm.firstName" required autofocus maxlength="60" placeholder="Nome" /></label>
           <label class="field"><span>Cognome *</span><input v-model="relativeForm.lastName" required maxlength="60" placeholder="Cognome" /><small v-if="selectedRelativeChoice.copySurname" class="field-hint">Proposto da {{ selectedPerson.lastName }}: puoi cambiarlo.</small></label>
           <label v-if="relativeKind === 'spouse' || relativeKind === 'partner'" class="field full"><span>Genere</span><select v-model="relativeForm.gender"><option value="unspecified">Non specificato</option><option value="female">Donna</option><option value="male">Uomo</option><option value="nonbinary">Non binario</option></select></label>
           <label class="field"><span>Data di nascita</span><input v-model="relativeForm.birthDate" type="date" /></label>
-          <label class="field"><span>Luogo di nascita</span><input v-model="relativeForm.birthPlace" maxlength="100" placeholder="Città o località" /></label>
+          <label class="field"><span>Data di decesso</span><input v-model="relativeForm.deathDate" type="date" /></label>
+          <label class="field full"><span>Luogo di nascita</span><input v-model="relativeForm.birthPlace" maxlength="100" placeholder="Città o località" /></label>
           <fieldset class="color-field full"><legend>Colore della scheda</legend><button v-for="color in personColors" :key="color" type="button" :style="{ background: color }" :class="{ active: relativeForm.color === color }" :aria-label="`Scegli colore ${color}`" @click="relativeForm.color = color"><Check v-if="relativeForm.color === color" :size="15" /></button></fieldset>
         </div>
         <div class="form-actions"><button type="button" class="button subtle" @click="modal = null">Annulla</button><button class="button primary" type="submit"><UserRoundPlus :size="17" />Aggiungi {{ selectedRelativeChoice.label.toLowerCase() }}</button></div>
