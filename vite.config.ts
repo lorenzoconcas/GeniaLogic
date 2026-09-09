@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig(({ command, isPreview }) => ({
-  // Keep local development at /; production and its preview use the Pages repository path.
-  base: command === 'build' || isPreview ? '/genialogic/' : '/',
+  // Pages paths are case-sensitive. CI provides the site's actual path via configure-pages.
+  base: command === 'build' || isPreview ? (process.env.PAGES_BASE_PATH || '/GeniaLogic/') : '/',
   plugins: [vue(), tailwindcss()],
 }))
