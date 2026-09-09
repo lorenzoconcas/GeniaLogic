@@ -6,7 +6,7 @@ import { MarkerType, VueFlow, useVueFlow, type Edge, type Node } from '@vue-flow
 import {
   Archive, CalendarDays, Check, ChevronRight, Download, Edit3, FilePlus2, FolderOpen,
   CircleDot, Focus, GitFork, Heart, Info, Link2, ListFilter, MapPin, Maximize2, Menu, MoreHorizontal,
-  ArrowLeftRight, Plus, Save, Search, ShieldCheck, Trash2, Upload, UserRoundPlus, Users, X,
+  ArrowLeftRight, PanelLeftClose, PanelLeftOpen, Plus, Save, Search, ShieldCheck, Trash2, Upload, UserRoundPlus, Users, X,
 } from '@lucide/vue'
 import ModalShell from './components/ModalShell.vue'
 import PersonNode from './components/PersonNode.vue'
@@ -32,6 +32,9 @@ const layoutMode = ref<LayoutMode>('generational')
 const selectedPersonId = ref<string | null>(null)
 const search = ref('')
 const mobileNavOpen = ref(false)
+const sidebarCollapsed = ref(false)
+const appIconUrl = `${import.meta.env.BASE_URL}genialogic.svg`
+const sidebarPreferenceKey = 'genialogic.sidebar-collapsed'
 const modal = ref<'person' | 'relative' | 'couple-child' | 'relationship' | 'delete-person' | 'delete-relationship' | 'new-tree' | null>(null)
 const editingPersonId = ref<string | null>(null)
 const pendingRelationshipId = ref<string | null>(null)
@@ -233,6 +236,11 @@ function showToast(message: string, tone: 'success' | 'error' = 'success') {
   toastTimer = window.setTimeout(() => { toast.value = null }, 3400)
 }
 function goTo(view: ViewName) { activeView.value = view; mobileNavOpen.value = false }
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  try { localStorage.setItem(sidebarPreferenceKey, String(sidebarCollapsed.value)) } catch { /* Storage may be unavailable in private browsing. */ }
+  refit()
+}
 
 function openNewPerson() {
   editingPersonId.value = null
@@ -498,6 +506,7 @@ watch(() => [tree.value.name, tree.value.people, tree.value.relationships], () =
 }, { deep: true })
 
 onMounted(async () => {
+  try { sidebarCollapsed.value = localStorage.getItem(sidebarPreferenceKey) === 'true' } catch { /* Use the default layout if storage is unavailable. */ }
   try {
     const local = await loadLocal()
     // Le vecchie installazioni potevano contenere un archivio dimostrativo.
@@ -511,11 +520,12 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <header class="app-header">
       <div class="flex items-center gap-3">
-        <button class="icon-button mobile-menu" aria-label="Apri navigazione" @click="mobileNavOpen = !mobileNavOpen"><Menu :size="20" /></button>
-        <button class="brand" aria-label="Vai all’albero" @click="goTo('tree')"><span class="brand-mark">GL</span><span><strong>GeniaLogic</strong><small>Archivio di famiglia</small></span></button>
+        <button class="icon-button mobile-menu" :aria-label="mobileNavOpen ? 'Chiudi navigazione' : 'Apri navigazione'" :aria-expanded="mobileNavOpen" aria-controls="main-sidebar" @click="mobileNavOpen = !mobileNavOpen"><Menu :size="20" /></button>
+        <button class="icon-button sidebar-toggle" :aria-label="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'" :title="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'" :aria-expanded="!sidebarCollapsed" aria-controls="main-sidebar" @click="toggleSidebar"><PanelLeftOpen v-if="sidebarCollapsed" :size="20" /><PanelLeftClose v-else :size="20" /></button>
+        <button class="brand" aria-label="Vai all’albero" @click="goTo('tree')"><img class="brand-mark" :src="appIconUrl" alt="" width="41" height="41" /><span><strong>GeniaLogic</strong><small>Archivio di famiglia</small></span></button>
       </div>
       <div class="header-actions">
         <span class="save-state" :class="saveState"><Check v-if="saveState === 'saved'" :size="13" /><span>{{ saveState === 'saving' ? 'Salvataggio…' : saveState === 'error' ? 'Errore salvataggio' : 'Salvato in locale' }}</span></span>
@@ -528,19 +538,19 @@ onMounted(async () => {
       <input ref="fileInput" class="sr-only" type="file" aria-label="Apri archivio GeniaLogic (.genia)" @change="openFile" />
     </header>
 
-    <aside class="sidebar" :class="{ open: mobileNavOpen }">
+    <aside id="main-sidebar" class="sidebar" :class="{ open: mobileNavOpen }">
       <div class="tree-heading">
         <p class="eyebrow">Albero attivo</p>
         <p class="tree-name">{{ tree.name }}</p>
         <p>{{ tree.people.length }} persone · {{ tree.relationships.length }} legami</p>
       </div>
       <nav aria-label="Navigazione principale">
-        <button v-for="item in navItems" :key="item.id" :class="{ active: activeView === item.id }" @click="goTo(item.id)"><component :is="item.icon" :size="18" /><span>{{ item.label }}</span><ChevronRight :size="14" /></button>
+        <button v-for="item in navItems" :key="item.id" :class="{ active: activeView === item.id }" :aria-label="item.label" :title="item.label" :aria-current="activeView === item.id ? 'page' : undefined" @click="goTo(item.id)"><component :is="item.icon" :size="18" /><span>{{ item.label }}</span><ChevronRight :size="14" /></button>
       </nav>
       <div class="sidebar-note"><ShieldCheck :size="18" /><div><strong>Privato per natura</strong><p>I dati non lasciano mai questo dispositivo.</p></div></div>
       <div class="sidebar-file-actions">
-        <button @click="chooseFile"><Upload :size="15" />Apri archivio</button>
-        <button @click="saveFile"><Download :size="15" />Esporta .genia</button>
+        <button aria-label="Apri archivio" title="Apri archivio" @click="chooseFile"><Upload :size="15" /><span>Apri archivio</span></button>
+        <button aria-label="Esporta .genia" title="Esporta .genia" @click="saveFile"><Download :size="15" /><span>Esporta .genia</span></button>
       </div>
     </aside>
     <button v-if="mobileNavOpen" class="nav-scrim" aria-label="Chiudi navigazione" @click="mobileNavOpen = false" />
