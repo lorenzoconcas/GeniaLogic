@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ArrowLeft, ChevronDown, ChevronRight, Plus } from '@lucide/vue'
 import type { Gender, Person, Relationship } from '../types'
 import { closeRelatives } from '../services/closeRelatives'
+import { createFanExport, downloadFan, fanPng } from '../services/fanExport'
 
 const props = defineProps<{
   people: Person[]
@@ -25,6 +26,34 @@ type FanSlot = {
 }
 
 const generations = ref(5)
+const exporting = ref(false)
+const exportMessage = ref('')
+const exportFailed = ref(false)
+
+async function exportFan(format: 'png' | 'svg') {
+  if (!rootPerson.value || exporting.value) return
+  exporting.value = true
+  exportMessage.value = ''
+  exportFailed.value = false
+  try {
+    const root = rootPerson.value
+    const context = document.createElement('canvas').getContext('2d')
+    if (!context) throw new Error('Impossibile preparare il ventaglio su questo dispositivo.')
+    const chart = createFanExport(root, slots.value, generations.value, relativeGroups.value, (text, size) => {
+      context.font = `600 ${size}px Arial, sans-serif`
+      return context.measureText(text).width
+    })
+    const name = `${root.firstName}-${root.lastName}`.replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 100)
+    const blob = format === 'svg' ? new Blob([chart.svg], { type: 'image/svg+xml;charset=utf-8' }) : await fanPng(chart)
+    downloadFan(blob, `GeniaLogic-ventaglio-${name}.${format}`)
+    exportMessage.value = `${format.toUpperCase()} pronto: nomi completi, figli e fratelli inclusi.`
+  } catch (error) {
+    exportFailed.value = true
+    exportMessage.value = error instanceof Error ? error.message : 'Esportazione non riuscita. Riprova in SVG.'
+  } finally {
+    exporting.value = false
+  }
+}
 const navigationHistory = ref<string[]>([])
 let returningTo: string | null = null
 const previousPerson = computed(() => {
@@ -159,6 +188,12 @@ function addMissingParent(slot: FanSlot) {
       <button class="radial-back" type="button" :disabled="!previousPerson" :title="previousPerson ? `Torna a ${previousPerson.firstName} ${previousPerson.lastName}` : 'Nessuna persona precedente'" aria-label="Indietro nella vista radiale" @click="goBack"><ArrowLeft :size="18" />Indietro</button>
       <div><span>Persona al centro</span><strong>{{ rootPerson ? `${rootPerson.firstName} ${rootPerson.lastName}` : 'Nessuna persona' }}</strong></div>
       <label><span>Generazioni</span><span class="generation-select"><select v-model.number="generations"><option v-for="count in [3, 4, 5, 6]" :key="count" :value="count">{{ count }}</option></select><ChevronDown :size="14" /></span></label>
+      <fieldset class="fan-export" :disabled="exporting || !rootPerson">
+        <legend>Esporta ventaglio</legend>
+        <button type="button" title="Esporta un PNG ad alta risoluzione con nomi completi" @click="exportFan('png')">PNG</button>
+        <button type="button" title="Esporta un SVG vettoriale con nomi completi, ingrandibile senza perdita di qualità" @click="exportFan('svg')">SVG</button>
+      </fieldset>
+      <p v-if="exporting || exportMessage" class="export-message" :class="{ 'export-error': exportFailed }" role="status" aria-live="polite">{{ exporting ? 'Preparazione del ventaglio…' : exportMessage }}</p>
     </header>
 
     <svg v-if="rootPerson" class="fan-canvas" :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`" preserveAspectRatio="xMidYMax meet" role="img" :aria-label="`Ventaglio degli antenati di ${rootPerson.firstName} ${rootPerson.lastName}`">
@@ -196,7 +231,16 @@ function addMissingParent(slot: FanSlot) {
 
 <style scoped>
 .radial-tree { position:relative; display:grid; grid-template-rows:auto minmax(12rem,1fr) auto; width:100%; height:100%; min-height:30rem; overflow:auto; background:radial-gradient(circle at 50% 100%,#fff 0,#f8f9fd 55%,#f2f4fa 100%); }
-.radial-toolbar { position:relative; z-index:5; margin:.75rem .75rem 0; display:flex; align-items:center; justify-content:space-between; gap:1rem; border:1px solid rgba(218,221,234,.9); border-radius:.65rem; background:rgba(255,255,255,.92); padding:.55rem .7rem; box-shadow:0 5px 18px rgba(35,39,68,.07); backdrop-filter:blur(8px); }
+.radial-toolbar { position:relative; z-index:5; margin:.75rem .75rem 0; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; border:1px solid rgba(218,221,234,.9); border-radius:.65rem; background:rgba(255,255,255,.92); padding:.55rem .7rem; box-shadow:0 5px 18px rgba(35,39,68,.07); backdrop-filter:blur(8px); }
+.fan-export { display:flex; gap:.4rem; margin:0; padding:0; border:0; }
+.fan-export legend { margin-bottom:.2rem; font-size:.875rem; color:#4d536b; }
+.fan-export button { min-height:2.5rem; padding:.45rem .7rem; border:1px solid #d8dbea; border-radius:.5rem; color:#4546bc; background:#f7f8fc; font-size:.875rem; font-weight:750; cursor:pointer; }
+.fan-export button:hover { background:#eeeeff; }
+.fan-export button:focus-visible { outline:2px solid #5657d9; outline-offset:2px; }
+.fan-export:disabled { opacity:.5; }
+.fan-export:disabled button { cursor:wait; }
+.export-message { flex-basis:100%; margin:0; color:#4546bc; font-size:.875rem; overflow-wrap:anywhere; }
+.export-message.export-error { color:#a52639; }
 .radial-toolbar>div { display:grid; flex:1; gap:.12rem; min-width:0; }
 .radial-back { display:inline-flex; align-items:center; justify-content:center; gap:.35rem; flex-shrink:0; min-height:2.5rem; border:1px solid #d8dbea; border-radius:.5rem; background:#f7f8fc; padding:.45rem .6rem; color:#4546bc; font-size:.875rem; font-weight:750; cursor:pointer; }
 .radial-back:hover:not(:disabled) { background:#eeeeff; border-color:#9293e4; }
