@@ -24,7 +24,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 
 type ViewName = 'tree' | 'people' | 'relationships' | 'archive'
-type LayoutMode = 'generational' | 'focus' | 'radial' | 'ancestors'
+type LayoutMode = 'generational' | 'focus' | 'fan' | 'radial' | 'ancestors'
 type PersonForm = Omit<Person, 'id'>
 type RelativeKind = 'father' | 'mother' | 'son' | 'daughter' | 'brother' | 'sister' | 'spouse' | 'partner'
 type ParentLinkType = 'biological-parent' | 'adoptive-parent' | 'foster-parent'
@@ -47,6 +47,7 @@ const pendingCoupleId = ref<string | null>(null)
 const relativeReturnPersonId = ref<string | null>(null)
 const relationshipError = ref('')
 const saveState = ref<'saved' | 'saving' | 'error'>('saved')
+const saveStatusLabel = computed(() => saveState.value === 'saving' ? 'Salvataggio…' : saveState.value === 'error' ? 'Errore salvataggio' : 'Salvato in locale')
 const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const hydrated = ref(false)
@@ -557,61 +558,57 @@ onMounted(async () => {
 
 <template>
   <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-    <header class="app-header">
-      <div class="flex items-center gap-3">
-        <button class="icon-button mobile-menu" :aria-label="mobileNavOpen ? 'Chiudi navigazione' : 'Apri navigazione'" :aria-expanded="mobileNavOpen" aria-controls="main-sidebar" @click="mobileNavOpen = !mobileNavOpen"><Menu :size="20" /></button>
+    <!-- No accept filter: iOS can otherwise disable .genia files in Files. -->
+    <input ref="fileInput" class="sr-only" type="file" aria-label="Apri archivio GeniaLogic (.genia)" @change="openFile" />
+    <aside id="main-sidebar" class="sidebar" :class="{ open: mobileNavOpen }" aria-label="Navigazione e comandi" @keydown.esc="mobileNavOpen = false">
+      <div class="sidebar-brand-row">
+        <button class="brand" aria-label="GeniaLogic — Vai all’albero" title="GeniaLogic — Vai all’albero" @click="goTo('tree')"><img class="brand-mark" :src="appIconUrl" alt="" width="32" height="32" /><span><strong>GeniaLogic</strong></span></button>
         <button class="icon-button sidebar-toggle" :aria-label="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'" :title="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'" :aria-expanded="!sidebarCollapsed" aria-controls="main-sidebar" @click="toggleSidebar"><PanelLeftOpen v-if="sidebarCollapsed" :size="20" /><PanelLeftClose v-else :size="20" /></button>
-        <button class="brand" aria-label="Vai all’albero" @click="goTo('tree')"><img class="brand-mark" :src="appIconUrl" alt="" width="41" height="41" /><span><strong>GeniaLogic</strong><small>Archivio di famiglia</small></span></button>
+        <button class="icon-button mobile-menu" aria-label="Chiudi navigazione" aria-controls="main-sidebar" @click="mobileNavOpen = false"><X :size="20" /></button>
       </div>
-      <div class="header-actions">
-        <span class="save-state" :class="saveState"><Check v-if="saveState === 'saved'" :size="13" /><span>{{ saveState === 'saving' ? 'Salvataggio…' : saveState === 'error' ? 'Errore salvataggio' : 'Salvato in locale' }}</span></span>
-        <button class="button subtle hide-small" @click="chooseFile"><FolderOpen :size="16" />Apri</button>
-        <button class="button subtle hide-small" @click="saveFile"><Save :size="16" />Salva file</button>
-        <button class="button primary" @click="openNewPerson"><Plus :size="17" />Persona</button>
-      </div>
-      <!-- iOS/iPadOS may disable custom file extensions in Files when accept is set.
-           Import validates the binary header and archive contents instead of the MIME type. -->
-      <input ref="fileInput" class="sr-only" type="file" aria-label="Apri archivio GeniaLogic (.genia)" @change="openFile" />
-    </header>
-
-    <aside id="main-sidebar" class="sidebar" :class="{ open: mobileNavOpen }">
       <div class="tree-heading">
         <p class="eyebrow">Albero attivo</p>
         <p class="tree-name">{{ tree.name }}</p>
         <p>{{ tree.people.length }} persone · {{ tree.relationships.length }} legami</p>
       </div>
+      <button class="button primary sidebar-add-person" aria-label="Aggiungi persona" title="Aggiungi persona" @click="mobileNavOpen = false; openNewPerson()"><Plus :size="18" /><span>Aggiungi persona</span></button>
       <nav aria-label="Navigazione principale">
         <button v-for="item in navItems" :key="item.id" :class="{ active: activeView === item.id }" :aria-label="item.label" :title="item.label" :aria-current="activeView === item.id ? 'page' : undefined" @click="goTo(item.id)"><component :is="item.icon" :size="18" /><span>{{ item.label }}</span><ChevronRight :size="14" /></button>
       </nav>
-      <div class="sidebar-note"><ShieldCheck :size="18" /><div><strong>Privato per natura</strong><p>I dati non lasciano mai questo dispositivo.</p></div></div>
-      <div class="sidebar-file-actions">
-        <button aria-label="Apri archivio" title="Apri archivio" @click="chooseFile"><Upload :size="15" /><span>Apri archivio</span></button>
-        <button aria-label="Esporta .genia" title="Esporta .genia" @click="saveFile"><Download :size="15" /><span>Esporta .genia</span></button>
+      <div class="sidebar-footer">
+        <div class="sidebar-file-actions">
+          <button aria-label="Apri archivio" title="Apri archivio" @click="mobileNavOpen = false; chooseFile()"><FolderOpen :size="18" /><span>Apri archivio</span></button>
+          <button aria-label="Salva file .genia" title="Salva file .genia" @click="mobileNavOpen = false; saveFile()"><Save :size="18" /><span>Salva file .genia</span></button>
+        </div>
+        <div class="save-state" :class="saveState" role="status" :aria-label="saveStatusLabel" :title="saveStatusLabel"><Check v-if="saveState === 'saved'" :size="16" /><Info v-else-if="saveState === 'error'" :size="16" /><Save v-else :size="16" /><span>{{ saveStatusLabel }}</span></div>
+        <div class="sidebar-note"><ShieldCheck :size="18" /><div><strong>Privato per natura</strong><p>I dati non lasciano mai questo dispositivo.</p></div></div>
       </div>
     </aside>
     <button v-if="mobileNavOpen" class="nav-scrim" aria-label="Chiudi navigazione" @click="mobileNavOpen = false" />
 
-    <main class="main-area">
+    <main class="main-area" :class="{ 'tree-main': activeView === 'tree' }">
+      <button class="icon-button mobile-menu mobile-nav-launcher" aria-label="Apri navigazione" :aria-expanded="mobileNavOpen" aria-controls="main-sidebar" @click="mobileNavOpen = true"><Menu :size="22" /></button>
       <template v-if="activeView === 'tree'">
         <section class="view-toolbar tree-view-toolbar">
-          <div><p class="eyebrow">Visualizzazione</p><h1>Albero genealogico</h1><p>Esplora generazioni e legami nell’archivio “{{ tree.name }}”.</p></div>
+          <h1 class="sr-only">Albero</h1>
           <div class="tree-view-actions">
             <div class="layout-switch" role="group" aria-label="Disposizione dell’albero">
               <button type="button" :class="{ active: layoutMode === 'generational' }" title="Disponi per generazioni" @click="setLayoutMode('generational')"><GitFork :size="15" /><span>Generazioni</span></button>
               <button type="button" :class="{ active: layoutMode === 'focus' }" title="Metti la persona selezionata al centro" @click="setLayoutMode('focus')"><Focus :size="15" /><span>Al centro</span></button>
-              <button type="button" :class="{ active: layoutMode === 'radial' }" title="Mostra il ventaglio degli antenati" @click="setLayoutMode('radial')"><CircleDot :size="15" /><span>Radiale</span></button>
+              <button type="button" :class="{ active: layoutMode === 'fan' }" :aria-pressed="layoutMode === 'fan'" title="Mostra il ventaglio degli antenati a 180°" @click="setLayoutMode('fan')"><CircleDot :size="15" /><span>Ventaglio</span></button>
+              <button type="button" :class="{ active: layoutMode === 'radial' }" :aria-pressed="layoutMode === 'radial'" title="Mostra gli antenati nel cerchio completo a 360°" @click="setLayoutMode('radial')"><CircleDot :size="15" /><span>Radiale</span></button>
               <button type="button" :class="{ active: layoutMode === 'ancestors' }" title="Mostra solo gli antenati" @click="setLayoutMode('ancestors')"><GitFork :size="15" /><span>Antenati</span></button>
             </div>
             <button class="button secondary" :disabled="tree.people.length < 2" @click="openRelationship()"><Link2 :size="16" />Aggiungi legame</button>
           </div>
         </section>
         <section class="tree-workspace">
-          <div v-if="tree.people.length" class="flow-wrap" :class="{ 'radial-mode': layoutMode === 'radial' || layoutMode === 'ancestors' }">
+          <div v-if="tree.people.length" class="flow-wrap" :class="{ 'radial-mode': layoutMode === 'fan' || layoutMode === 'radial' || layoutMode === 'ancestors' }">
             <div v-if="graphVisible()" class="graph-search-toolbar">
               <GraphPersonSearch :key="tree.id" :people="tree.people" :selected-id="selectedPersonId" @select-person="revealPerson" />
               <button class="fit-button" title="Centra albero" aria-label="Centra albero" @click="refit"><Maximize2 :size="17" /></button>
             </div>
-            <RadialTree v-if="layoutMode === 'radial'" :people="tree.people" :relationships="tree.relationships" :root-id="selectedPersonId ?? tree.people[0].id" @select-person="selectedPersonId = $event" @add-parent="openParentFromRadial" />
+            <RadialTree v-if="layoutMode === 'fan' || layoutMode === 'radial'" :shape="layoutMode === 'radial' ? 'circle' : 'fan'" :people="tree.people" :relationships="tree.relationships" :root-id="selectedPersonId ?? tree.people[0].id" @select-person="selectedPersonId = $event" @add-parent="openParentFromRadial" />
             <AncestorTree v-else-if="layoutMode === 'ancestors'" :key="tree.id" :people="tree.people" :relationships="tree.relationships" :root-id="selectedPersonId ?? tree.people[0].id" @select-person="selectedPersonId = $event" />
             <VueFlow v-else :nodes="flowNodes" :edges="flowEdges" :min-zoom="0.18" :max-zoom="1.7" fit-view-on-init nodes-draggable :nodes-connectable="false" :elements-selectable="true" @node-click="selectNode">
               <template #node-person="props"><PersonNode v-bind="props" @add-relative="openRelativeFor" /></template>

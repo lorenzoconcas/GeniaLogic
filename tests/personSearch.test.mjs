@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import ts from 'typescript'
+import { createContext, runInContext } from 'node:vm'
 
 const source = readFileSync(new URL('../src/services/personSearch.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
@@ -40,4 +41,30 @@ test('empty/no-match queries are empty; matching lists are not silently capped',
   assert.deepEqual(searchPeople(people, 'nessuno'), [])
   assert.equal(searchPeople(people, 'Concas').length, 200)
   assert.deepEqual(searchPeople([], 'Maria'), [])
+})
+
+test('fan and radial search select any archive person and reset the viewport without mutating people', () => {
+  const component = readFileSync(new URL('../src/components/RadialTree.vue', import.meta.url), 'utf8').split('<script setup lang="ts">')[1].split('</script>')[0]
+  const ast = ts.createSourceFile('RadialTree.ts', component, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const handler = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'selectSearchRoot')
+  assert.ok(handler)
+  const code = ts.transpileModule(handler.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  for (const shape of ['fan', 'circle']) {
+    const people = [person('root'), person('disconnected')]
+    const before = JSON.stringify(people)
+    const events = []
+    const calls = []
+    const context = createContext({ props: { people, shape, rootId: 'root' }, exportMessage: { value: 'Old export' }, closeDetails: () => calls.push('close'), resetCamera: () => calls.push('reset'), emit: (...args) => events.push(args) })
+    runInContext(code, context)
+    context.selectSearchRoot('disconnected')
+    assert.deepEqual(events, [['selectPerson', 'disconnected']])
+    assert.deepEqual(calls, ['close', 'reset'])
+    assert.equal(context.exportMessage.value, '')
+    assert.equal(JSON.stringify(people), before)
+    context.selectSearchRoot('missing')
+    assert.equal(events.length, 1)
+    context.selectSearchRoot('root')
+    assert.equal(events.length, 2)
+    assert.equal(calls.filter(call => call === 'reset').length, 2)
+  }
 })

@@ -1,6 +1,20 @@
 import type { Person } from '../types'
 
 export type ExportSlot = { generation: number; index: number; person?: Person }
+export type FanShape = 'fan' | 'circle'
+
+export function fanSectorAngles(generation: number, index: number, shape: FanShape = 'fan') {
+  const angle = (shape === 'circle' ? Math.PI * 2 : Math.PI) / 2 ** generation
+  // Keep the paternal half on the left and the maternal half on the right.
+  const origin = shape === 'circle' ? Math.PI * 1.5 : Math.PI
+  const start = origin - (index + 1) * angle
+  const end = origin - index * angle
+  return { angle, start, end, middle: (start + end) / 2 }
+}
+
+export function readableRotation(degrees: number) {
+  return ((degrees + 90) % 180 + 180) % 180 - 90
+}
 type RelativeGroup = { title: string; people: Person[] }
 type MeasureText = (text: string, size: number) => number
 const fontSize = 18
@@ -36,14 +50,14 @@ function personLabel(person: Person, measure: MeasureText) {
   return { lines, width: Math.max(...lines.map((line) => measure(line, fontSize))) * 1.15 + 8, height: lines.length * lineHeight }
 }
 
-export function createFanExport(root: Person, slots: ExportSlot[], generations: number, groups: RelativeGroup[], measure: MeasureText) {
+export function createFanExport(root: Person, slots: ExportSlot[], generations: number, groups: RelativeGroup[], measure: MeasureText, shape: FanShape = 'fan') {
   if (!Number.isInteger(generations) || generations < 1 || generations > 10) throw new Error('Numero di generazioni non valido.')
   const rootLabel = personLabel(root, measure)
   const rootRadius = Math.max(110, Math.hypot(rootLabel.width / 2, rootLabel.height / 2) + padding)
   let radius = rootRadius + 10
   const rings = []
   for (let generation = 1; generation <= generations; generation++) {
-    const angle = Math.PI / 2 ** generation
+    const angle = fanSectorAngles(generation, 0, shape).angle
     const members = slots.filter((slot) => slot.generation === generation).map((slot) => ({ ...slot, label: slot.person ? personLabel(slot.person, measure) : undefined }))
     const width = Math.max(80, ...members.map((slot) => slot.label?.width ?? 0))
     const height = Math.max(24, ...members.map((slot) => slot.label?.height ?? 0))
@@ -56,21 +70,19 @@ export function createFanExport(root: Person, slots: ExportSlot[], generations: 
   const width = Math.ceil(radius * 2 + margin * 2)
   const cx = width / 2
   const cy = radius + 100
-  let footerY = cy + rootRadius + 55
+  let footerY = cy + (shape === 'circle' ? radius : rootRadius) + 55
   const parts: string[] = []
   const textLines = (lines: string[], x: number, y: number, fill = '#24283c') => `<text x="${x}" y="${y}" text-anchor="middle" fill="${fill}" font-size="${fontSize}" font-weight="600">${lines.map((line, index) => `<tspan x="${x}" dy="${index ? lineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text>`
   const polar = (r: number, a: number) => `${cx + Math.cos(a) * r} ${cy - Math.sin(a) * r}`
-  parts.push('<text x="40" y="42" font-size="26" font-weight="700" fill="#24283c">Ventaglio genealogico</text>')
+  parts.push(`<text x="40" y="42" font-size="26" font-weight="700" fill="#24283c">${shape === 'circle' ? 'Albero genealogico radiale' : 'Ventaglio genealogico'}</text>`)
   parts.push(`<text x="40" y="72" font-size="16" fill="#555c70">GeniaLogic · ${generations} generazioni di antenati</text>`)
   for (const ring of rings) {
     for (const slot of ring.members) {
-      const start = Math.PI - (slot.index + 1) * ring.angle
-      const end = start + ring.angle
-      const middle = (start + end) / 2
+      const { start, end, middle } = fanSectorAngles(ring.generation, slot.index, shape)
       const path = `M ${polar(ring.outer, start)} A ${ring.outer} ${ring.outer} 0 0 0 ${polar(ring.outer, end)} L ${polar(ring.inner, end)} A ${ring.inner} ${ring.inner} 0 0 1 ${polar(ring.inner, start)} Z`
       parts.push(`<path d="${path}" fill="${slot.person ? color(slot.person) : '#f1f3f8'}" fill-opacity="${slot.person ? '.14' : '1'}" stroke="#b9c0d1" stroke-width="1"/>`)
       if (!slot.person || !slot.label) continue
-      const rotation = middle > Math.PI / 2 ? 180 - middle * 180 / Math.PI : -middle * 180 / Math.PI
+      const rotation = readableRotation(-middle * 180 / Math.PI)
       parts.push(`<g transform="translate(${polar(ring.labelRadius, middle)}) rotate(${rotation})"><title>${escapeXml(fullName(slot.person))}</title>${textLines(slot.label.lines, 0, -slot.label.height / 2 + 19)}</g>`)
     }
   }
@@ -99,7 +111,7 @@ export function createFanExport(root: Person, slots: ExportSlot[], generations: 
   footerY = Math.max(footerY, ...groupBottoms)
   const height = Math.ceil(footerY + margin)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="Arial, sans-serif"><title>${escapeXml(`Antenati di ${fullName(root)}`)}</title><rect width="100%" height="100%" fill="white"/>${parts.join('')}</svg>`
-  return { svg, width, height, rings }
+  return { svg, width, height, rings, centerX: cx, centerY: cy, outerRadius: radius, shape }
 }
 
 export function pngScale(width: number, height: number) {

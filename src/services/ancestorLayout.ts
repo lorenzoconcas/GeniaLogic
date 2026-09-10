@@ -31,7 +31,7 @@ function wrapName(text: string, measure: Measure): string[] {
 }
 
 export function ancestorLayout(people: Person[], relationships: Relationship[], rootId: string, generations: number, orientation: AncestorOrientation, measure: Measure) {
-  if (!Number.isInteger(generations) || generations < 1 || generations > 6) throw new Error('Scegli da 1 a 6 generazioni.')
+  if (!Number.isInteger(generations) || generations < 1 || generations > 10) throw new Error('Scegli da 1 a 10 generazioni.')
   const byId = new Map(people.map(person => [person.id, person]))
   if (!byId.has(rootId)) throw new Error('Scegli una persona di partenza.')
   const parents = new Map<string, Relationship[]>()
@@ -49,7 +49,8 @@ export function ancestorLayout(people: Person[], relationships: Relationship[], 
   const nodes: AncestorNode[] = []
   const children = new Map<string, AncestorNode[]>()
   function visit(personId: string, generation: number, path: Set<string>, parentId?: string, relationshipType?: string): AncestorNode {
-    if (nodes.length >= 2000) throw new Error('Troppi rami da visualizzare: riduci il numero di generazioni.')
+    // Ten complete binary generations already require 2,047 occurrences.
+    if (nodes.length >= 8192) throw new Error('Troppi rami da visualizzare: riduci il numero di generazioni.')
     const person = byId.get(personId)!
     const cycle = path.has(personId)
     const dates = person.deathDate ? `${person.birthDate?.slice(0, 4) || '?'}–${person.deathDate.slice(0, 4)}` : person.birthDate ? `n. ${person.birthDate.slice(0, 4)}` : 'Date non inserite'

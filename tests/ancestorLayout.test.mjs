@@ -19,8 +19,8 @@ test('only follows incoming ancestry, including all adoptive and foster parents'
   assert.equal(chart.links.filter(l => l.dash).length, 2)
 })
 
-test('full trees of 1–6 generations have non-overlapping cards within export bounds in both orientations', () => {
-  for (let generations = 1; generations <= 6; generations++) {
+test('full trees of 1–10 generations have non-overlapping cards within export bounds in both orientations', () => {
+  for (let generations = 1; generations <= 10; generations++) {
     const count = 2 ** (generations + 1) - 1
     const people = Array.from({ length: count }, (_, i) => person(String(i)))
     const relationships = people.slice(1).map((p, i) => link(p.id, String(Math.floor(i / 2))))
@@ -65,7 +65,7 @@ test('generation limit, duplicate links, isolated root and missing roots', () =>
   assert.equal(ancestorLayout(people, relationships, 'root', 1, 'vertical', measure).nodes.length, 2)
   assert.equal(ancestorLayout(people, [], 'root', 4, 'vertical', measure).nodes.length, 1)
   assert.throws(() => ancestorLayout(people, [], 'missing', 4, 'vertical', measure), /persona/)
-  assert.throws(() => ancestorLayout(people, [], 'root', 7, 'vertical', measure), /generazioni/)
+  assert.throws(() => ancestorLayout(people, [], 'root', 11, 'vertical', measure), /generazioni/)
 })
 
 test('preserves long names without abbreviations and escapes user content in standalone SVG', () => {
