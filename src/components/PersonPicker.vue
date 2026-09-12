@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { Check, Search, UserRound } from '@lucide/vue'
 import type { Person } from '../types'
 
-const props = defineProps<{ people: Person[]; modelValue: string; label: string }>()
+const props = withDefaults(defineProps<{ people: Person[]; modelValue: string; label: string; fill?: boolean; autofocusSearch?: boolean }>(), { fill: false, autofocusSearch: false })
 const emit = defineEmits<{ 'update:modelValue': [id: string] }>()
 const search = ref('')
 const selected = computed(() => props.people.find(person => person.id === props.modelValue))
@@ -38,7 +38,7 @@ watch(() => props.modelValue, () => { search.value = '' })
 </script>
 
 <template>
-  <fieldset class="person-picker">
+  <fieldset class="person-picker" :class="{ 'person-picker-fill': fill }">
     <legend>{{ label }}</legend>
     <div class="picker-selected" aria-live="polite">
       <div class="picker-avatar" :style="{ background: selected?.color ?? '#73798c' }"><template v-if="selected">{{ selected.firstName[0] }}{{ selected.lastName[0] }}</template><UserRound v-else :size="20" /></div>
@@ -46,7 +46,7 @@ watch(() => props.modelValue, () => { search.value = '' })
       <div v-else class="picker-identity"><strong>Scegli una persona</strong></div>
       <Check v-if="selected" :size="17" class="picker-check" />
     </div>
-    <label class="picker-search"><Search :size="17" /><input v-model="search" type="search" :aria-label="`Cerca ${label.toLocaleLowerCase('it')}`" placeholder="Nome, cognome, anno o luogo…" /></label>
+    <label class="picker-search"><Search :size="17" /><input v-model="search" type="search" :autofocus="autofocusSearch" :aria-label="`Cerca ${label.toLocaleLowerCase('it')}`" placeholder="Nome, cognome, anno o luogo…" /></label>
     <p class="picker-count">{{ results.length }} persone · ordine per cognome</p>
     <div class="picker-results" :aria-label="`Persone per ${label.toLocaleLowerCase('it')}`">
       <button v-for="person in results" :key="person.id" type="button" class="picker-option" :class="{ chosen: person.id === modelValue }" :aria-pressed="person.id === modelValue" @click="emit('update:modelValue', person.id)">
@@ -75,6 +75,8 @@ watch(() => props.modelValue, () => { search.value = '' })
 .picker-search:focus-within { outline:2px solid #7778df; outline-offset:2px; }
 .picker-count { margin:.4rem 0; color:#6e7588; font-size:.75rem; }
 .picker-results { max-height:15rem; overflow-y:auto; overscroll-behavior:contain; border:1px solid #dfe3ed; border-radius:.65rem; }
+.person-picker-fill { display:flex; min-height:0; height:100%; flex-direction:column; }
+.person-picker-fill .picker-results { min-height:9rem; max-height:none; flex:1; }
 .picker-option { width:100%; border:0; border-bottom:1px solid #e8eaf1; background:white; cursor:pointer; }
 .picker-option:last-child { border-bottom:0; }
 .picker-option:hover,.picker-option.chosen { background:#f0f0ff; }

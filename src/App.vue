@@ -12,6 +12,7 @@ import ModalShell from './components/ModalShell.vue'
 import PersonNode from './components/PersonNode.vue'
 import RadialTree from './components/RadialTree.vue'
 import PersonPicker from './components/PersonPicker.vue'
+import PersonSelectionCard from './components/PersonSelectionCard.vue'
 import GraphPersonSearch from './components/GraphPersonSearch.vue'
 import AncestorTree from './components/AncestorTree.vue'
 import { emptyTree, personColors, relationshipOptions } from './data'
@@ -64,6 +65,7 @@ const pendingRelationshipId = ref<string | null>(null)
 const pendingCoupleId = ref<string | null>(null)
 const relativeReturnPersonId = ref<string | null>(null)
 const relationshipError = ref('')
+const relationshipPickerTarget = ref<'source' | 'target' | null>(null)
 const saveState = ref<'saved' | 'saving' | 'error'>('saved')
 const saveStatusLabel = computed(() => saveState.value === 'saving' ? 'Salvataggio…' : saveState.value === 'error' ? 'Errore salvataggio' : 'Salvato in locale')
 const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null)
@@ -121,6 +123,9 @@ const relativeChoices: Array<{ value: RelativeKind; label: string; description: 
 const selectedPerson = computed(() => tree.value.people.find((person) => person.id === selectedPersonId.value) ?? null)
 const pendingRelationship = computed(() => tree.value.relationships.find((relationship) => relationship.id === pendingRelationshipId.value) ?? null)
 const pendingCouple = computed(() => tree.value.relationships.find((relationship) => relationship.id === pendingCoupleId.value) ?? null)
+const relationshipSourcePerson = computed(() => tree.value.people.find((person) => person.id === relationshipForm.sourceId))
+const relationshipTargetPerson = computed(() => tree.value.people.find((person) => person.id === relationshipForm.targetId))
+const relationshipPickerPeople = computed(() => tree.value.people.filter((person) => person.id !== (relationshipPickerTarget.value === 'source' ? relationshipForm.targetId : relationshipForm.sourceId)))
 const selectedRelativeChoice = computed(() => relativeChoices.find((choice) => choice.value === relativeKind.value)!)
 const automaticChildSpouse = computed(() => {
   if (!selectedPersonId.value || (relativeKind.value !== 'son' && relativeKind.value !== 'daughter')) return undefined
@@ -423,14 +428,21 @@ function deleteSelectedPerson() {
 }
 
 function openRelationship(prefillId?: string) {
+  relationshipPickerTarget.value = null
   relationshipError.value = ''
   relationshipForm.sourceId = prefillId ?? selectedPersonId.value ?? tree.value.people[0]?.id ?? ''
-  relationshipForm.targetId = tree.value.people.find((person) => person.id !== relationshipForm.sourceId)?.id ?? ''
+  relationshipForm.targetId = ''
   relationshipForm.type = 'biological-parent'
   relationshipForm.startDate = ''
   relationshipForm.endDate = ''
   relationshipForm.notes = ''
   modal.value = 'relationship'
+}
+function selectRelationshipPerson(personId: string) {
+  if (relationshipPickerTarget.value === 'source') relationshipForm.sourceId = personId
+  else if (relationshipPickerTarget.value === 'target') relationshipForm.targetId = personId
+  relationshipPickerTarget.value = null
+  relationshipError.value = ''
 }
 function swapRelationshipPeople() {
   const first = relationshipForm.sourceId
@@ -469,6 +481,7 @@ function submitRelationship() {
   relationshipError.value = validateRelationship() ?? ''
   if (relationshipError.value) return
   tree.value.relationships.push({ id: crypto.randomUUID(), ...relationshipForm })
+  relationshipPickerTarget.value = null
   modal.value = null
   showToast('Legame aggiunto')
   refit()
@@ -929,19 +942,28 @@ onMounted(async () => {
       </form>
     </ModalShell>
 
-    <ModalShell v-if="modal === 'relationship'" title="Aggiungi un legame" subtitle="L’ordine delle persone conta per i legami di genitorialità." wide @close="modal = null">
-      <form class="relationship-form" @submit.prevent="submitRelationship">
-        <div class="relationship-picker-actions"><button type="button" class="button secondary" @click="swapRelationshipPeople"><ArrowLeftRight :size="18" />Inverti persone</button></div>
-        <div class="relationship-pair">
-          <PersonPicker v-model="relationshipForm.sourceId" :people="tree.people" label="Prima persona" />
-          <PersonPicker v-model="relationshipForm.targetId" :people="tree.people" label="Seconda persona" />
+    <ModalShell v-if="modal === 'relationship'" title="Aggiungi un legame" subtitle="Scegli le due persone e descrivi il loro legame. L’ordine conta per la genitorialità." fullscreen :inactive="!!relationshipPickerTarget" @close="modal = null">
+      <form class="relationship-form relationship-fullscreen-form" @submit.prevent="submitRelationship">
+        <div class="relationship-content-grid">
+          <section class="relationship-details">
+            <div class="relationship-pair-compact">
+              <PersonSelectionCard label="Prima persona" :person="relationshipSourcePerson" @choose="relationshipPickerTarget = 'source'" />
+              <button type="button" class="icon-button relationship-swap" :disabled="!relationshipForm.sourceId || !relationshipForm.targetId" aria-label="Inverti prima e seconda persona" title="Inverti persone" @click="swapRelationshipPeople"><ArrowLeftRight :size="19" /></button>
+              <PersonSelectionCard label="Seconda persona" :person="relationshipTargetPerson" @choose="relationshipPickerTarget = 'target'" />
+            </div>
+            <p v-if="parentTypeValues.has(relationshipForm.type) && relationshipForm.sourceId && relationshipForm.targetId" class="relationship-direction" aria-live="polite"><span>{{ relationshipForm.type === 'guardian' ? 'Tutore' : 'Genitore' }}: <strong>{{ fullName(findPerson(relationshipForm.sourceId)) }}</strong></span><ChevronRight :size="18" /><span>{{ relationshipForm.type === 'guardian' ? 'Persona tutelata' : 'Figlio/a' }}: <strong>{{ fullName(findPerson(relationshipForm.targetId)) }}</strong></span></p>
+            <div class="form-grid compact"><label class="field"><span>Data di inizio</span><input v-model="relationshipForm.startDate" type="date" /></label><label class="field"><span>Data di fine</span><input v-model="relationshipForm.endDate" type="date" /></label><label class="field full"><span>Nota sul legame</span><textarea v-model="relationshipForm.notes" rows="5" maxlength="300" placeholder="Facoltativa" /></label></div>
+          </section>
+          <aside class="relationship-settings">
+            <fieldset class="relationship-types"><legend>Tipo di legame</legend><div v-for="group in relationshipGroups" :key="group.name"><p>{{ group.name }}</p><label v-for="option in group.options" :key="option.value" :class="{ active: relationshipForm.type === option.value }"><input v-model="relationshipForm.type" type="radio" :value="option.value" /><span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span><Check v-if="relationshipForm.type === option.value" :size="17" /></label></div></fieldset>
+          </aside>
         </div>
-        <p v-if="parentTypeValues.has(relationshipForm.type)" class="relationship-direction" aria-live="polite"><span>{{ relationshipForm.type === 'guardian' ? 'Tutore' : 'Genitore' }}: <strong>{{ fullName(findPerson(relationshipForm.sourceId)) }}</strong></span><ChevronRight :size="18" /><span>{{ relationshipForm.type === 'guardian' ? 'Persona tutelata' : 'Figlio/a' }}: <strong>{{ fullName(findPerson(relationshipForm.targetId)) }}</strong></span></p>
-        <fieldset class="relationship-types"><legend>Tipo di legame</legend><div v-for="group in relationshipGroups" :key="group.name"><p>{{ group.name }}</p><label v-for="option in group.options" :key="option.value" :class="{ active: relationshipForm.type === option.value }"><input v-model="relationshipForm.type" type="radio" :value="option.value" /><span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span><Check v-if="relationshipForm.type === option.value" :size="17" /></label></div></fieldset>
-        <div class="form-grid compact"><label class="field"><span>Data di inizio</span><input v-model="relationshipForm.startDate" type="date" /></label><label class="field"><span>Data di fine</span><input v-model="relationshipForm.endDate" type="date" /></label><label class="field full"><span>Nota sul legame</span><input v-model="relationshipForm.notes" maxlength="300" placeholder="Facoltativa" /></label></div>
-        <p v-if="relationshipError" class="form-error"><Info :size="16" />{{ relationshipError }}</p>
-        <div class="form-actions"><button type="button" class="button subtle" @click="modal = null">Annulla</button><button class="button primary" type="submit"><Link2 :size="16" />Aggiungi legame</button></div>
+        <footer class="relationship-footer"><p v-if="relationshipError" class="form-error"><Info :size="16" />{{ relationshipError }}</p><div class="form-actions"><button type="button" class="button subtle" @click="modal = null">Annulla</button><button class="button primary" type="submit"><Link2 :size="16" />Aggiungi legame</button></div></footer>
       </form>
+    </ModalShell>
+
+    <ModalShell v-if="modal === 'relationship' && relationshipPickerTarget" :title="relationshipPickerTarget === 'source' ? 'Scegli la prima persona' : 'Scegli la seconda persona'" subtitle="Cerca per nome, cognome, anno, luogo o riferimento." wide @close="relationshipPickerTarget = null">
+      <PersonPicker :model-value="relationshipPickerTarget === 'source' ? relationshipForm.sourceId : relationshipForm.targetId" :people="relationshipPickerPeople" :label="relationshipPickerTarget === 'source' ? 'Prima persona' : 'Seconda persona'" autofocus-search @update:model-value="selectRelationshipPerson" />
     </ModalShell>
 
     <ModalShell v-if="modal === 'delete-person' && selectedPerson" title="Eliminare questa persona?" subtitle="Verranno rimossi anche tutti i suoi legami." @close="modal = null"><div class="confirm-box"><div class="profile-avatar" :style="{ background: selectedPerson.color }">{{ initials(selectedPerson) }}</div><div><strong>{{ fullName(selectedPerson) }}</strong><p>{{ tree.relationships.filter(r => r.sourceId === selectedPerson!.id || r.targetId === selectedPerson!.id).length }} legami associati</p></div></div><div class="form-actions"><button class="button subtle" @click="modal = null">Annulla</button><button class="button danger" @click="deleteSelectedPerson"><Trash2 :size="16" />Elimina definitivamente</button></div></ModalShell>
