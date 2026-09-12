@@ -15,7 +15,12 @@ import PersonPicker from './components/PersonPicker.vue'
 import GraphPersonSearch from './components/GraphPersonSearch.vue'
 import AncestorTree from './components/AncestorTree.vue'
 import { emptyTree, personColors, relationshipOptions } from './data'
-import { exportTree, importTree, loadLocal, saveLocal } from './services/storage'
+import {
+  createTreeHandle, ensureFilePermission, exportTree, forgetFileHandle, getRememberedFileHandle,
+  importTree, loadLocal, pickTreeHandle, readTreeHandle, rememberFileHandle, saveLocal, writeTreeHandle,
+  type GeniaFileHandle, type OpenedTreeFile,
+} from './services/storage'
+import { mergeTrees } from './services/treeMerge'
 import { generationLayout } from './services/generationLayout'
 import { quickChildRelationships, singleSpouse } from './services/quickChild'
 import type { FamilyTree, Gender, Person, Relationship, RelationshipType } from './types'
@@ -51,6 +56,16 @@ const saveStatusLabel = computed(() => saveState.value === 'saving' ? 'Salvatagg
 const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const hydrated = ref(false)
+const startupPrompt = ref<{ kind: 'file' | 'local'; name: string } | null>(null)
+const startupBusy = ref(false)
+const conflictBusy = ref(false)
+const linkedFileName = ref<string | null>(null)
+const pendingFileConflict = ref<OpenedTreeFile | null>(null)
+let startupHandle: GeniaFileHandle | null = null
+let startupLocal: FamilyTree | null = null
+let linkedHandle: GeniaFileHandle | null = null
+let fileBaseline: FamilyTree | null = null
+let fileInputPurpose: 'open' | 'verify-save' = 'open'
 let saveTimer: number | undefined
 let toastTimer: number | undefined
 
@@ -497,17 +512,79 @@ watch(selectedPersonId, (id) => {
   if (highlightedPersonId.value !== id) highlightedPersonId.value = null
 })
 
+function cloneTree(value: FamilyTree): FamilyTree {
+  return JSON.parse(JSON.stringify(value)) as FamilyTree
+}
+function sameTree(left: FamilyTree, right: FamilyTree) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+function activateTree(imported: FamilyTree) {
+  tree.value = imported
+  selectedPersonId.value = imported.people[0]?.id ?? null
+  activeView.value = 'tree'
+  refit()
+}
+async function connectHandle(handle: GeniaFileHandle, opened?: OpenedTreeFile) {
+  if (!await ensureFilePermission(handle)) throw new Error('Permesso di accesso al file non concesso.')
+  const fresh = opened ?? await readTreeHandle(handle)
+  linkedHandle = handle
+  linkedFileName.value = fresh.name || handle.name
+  fileBaseline = cloneTree(fresh.tree)
+  try { await rememberFileHandle(handle) } catch { /* Il collegamento resta valido per la sessione corrente. */ }
+  activateTree(fresh.tree)
+}
 async function saveFile() {
   try {
-    await exportTree(tree.value)
-    showToast('Archivio .genia salvato')
+    if (linkedHandle && fileBaseline) {
+      if (!await ensureFilePermission(linkedHandle)) throw new Error('Permesso di accesso al file non concesso.')
+      const currentFile = await readTreeHandle(linkedHandle)
+      if (!sameTree(currentFile.tree, fileBaseline)) {
+        pendingFileConflict.value = currentFile
+        return
+      }
+      await writeTreeHandle(linkedHandle, tree.value)
+      fileBaseline = cloneTree(tree.value)
+      showToast(`“${linkedFileName.value}” aggiornato`)
+      return
+    }
+    if (fileBaseline && linkedFileName.value && !('showOpenFilePicker' in window)) {
+      const input = fileInput.value
+      if (!input) return
+      fileInputPurpose = 'verify-save'
+      input.value = ''
+      input.click()
+      return
+    }
+    const handle = await createTreeHandle(tree.value)
+    if (handle) {
+      linkedHandle = handle
+      linkedFileName.value = handle.name
+      fileBaseline = cloneTree(tree.value)
+      try { await rememberFileHandle(handle) } catch { /* Il file è comunque stato salvato. */ }
+      showToast(`“${handle.name}” salvato e collegato`)
+    } else {
+      await exportTree(tree.value)
+      showToast('Archivio .genia scaricato')
+    }
   } catch (error) {
-    if ((error as DOMException)?.name !== 'AbortError') showToast('Non è stato possibile salvare il file', 'error')
+    if ((error as DOMException)?.name !== 'AbortError') showToast(error instanceof Error ? error.message : 'Non è stato possibile salvare il file', 'error')
   }
 }
-function chooseFile() {
+async function chooseFile() {
+  try {
+    const handle = await pickTreeHandle()
+    if (handle) {
+      await connectHandle(handle)
+      showToast(`“${handle.name}” aperto e collegato`)
+      return
+    }
+  } catch (error) {
+    if ((error as DOMException)?.name !== 'AbortError') showToast(error instanceof Error ? error.message : 'Non è stato possibile aprire il file', 'error')
+    return
+  }
   const input = fileInput.value
   if (!input) return
+  fileInputPurpose = 'open'
   input.value = ''
   input.click()
 }
@@ -517,15 +594,97 @@ async function openFile(event: Event) {
   if (!file) return
   try {
     const imported = await importTree(file)
-    tree.value = imported
-    selectedPersonId.value = imported.people[0]?.id ?? null
-    activeView.value = 'tree'
+    if (fileInputPurpose === 'verify-save') {
+      if (linkedFileName.value && file.name !== linkedFileName.value) throw new Error(`Seleziona “${linkedFileName.value}” per verificare le modifiche prima del salvataggio.`)
+      const currentFile = { tree: imported, lastModified: file.lastModified, name: file.name }
+      if (fileBaseline && !sameTree(imported, fileBaseline)) {
+        pendingFileConflict.value = currentFile
+      } else {
+        await exportTree(tree.value)
+        fileBaseline = cloneTree(tree.value)
+        showToast('Archivio verificato e scaricato')
+      }
+      return
+    }
+    linkedHandle = null
+    linkedFileName.value = file.name
+    fileBaseline = cloneTree(imported)
+    try { await forgetFileHandle() } catch { /* L'apertura manuale resta valida. */ }
+    activateTree(imported)
     showToast(`“${imported.name}” aperto`)
-    refit()
-  } catch (error) { showToast(error instanceof Error ? error.message : 'File non valido', 'error') }
-  input.value = ''
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'File non valido', 'error')
+  } finally {
+    fileInputPurpose = 'open'
+    input.value = ''
+  }
 }
-function createNewTree() {
+async function reopenPrevious() {
+  startupBusy.value = true
+  try {
+    if (startupPrompt.value?.kind === 'file' && startupHandle) {
+      await connectHandle(startupHandle)
+      showToast(`“${linkedFileName.value}” ricaricato dal disco`)
+    } else if (startupLocal) {
+      activateTree(cloneTree(startupLocal))
+    }
+    startupPrompt.value = null
+    hydrated.value = true
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Non è stato possibile riaprire il file', 'error')
+  } finally { startupBusy.value = false }
+}
+async function declinePrevious() {
+  startupBusy.value = true
+  try { await forgetFileHandle() } catch { /* Il nuovo archivio può essere creato comunque. */ }
+  startupPrompt.value = null
+  startupHandle = null
+  startupLocal = null
+  linkedHandle = null
+  linkedFileName.value = null
+  fileBaseline = null
+  activateTree(emptyTree())
+  hydrated.value = true
+  startupBusy.value = false
+}
+async function resolveFileConflict(action: 'merge' | 'overwrite') {
+  if (!fileBaseline || !pendingFileConflict.value) return
+  conflictBusy.value = true
+  try {
+    let latest = pendingFileConflict.value
+    if (linkedHandle) {
+      latest = await readTreeHandle(linkedHandle)
+      if (!sameTree(latest.tree, pendingFileConflict.value.tree)) {
+        pendingFileConflict.value = latest
+        showToast('Il file è cambiato di nuovo: controlla il conflitto aggiornato.', 'error')
+        return
+      }
+    }
+    let output = tree.value
+    let mergeConflicts = 0
+    if (action === 'merge') {
+      const merged = mergeTrees(fileBaseline, tree.value, latest.tree)
+      tree.value = merged.tree
+      output = merged.tree
+      mergeConflicts = merged.conflicts
+    }
+    if (linkedHandle) await writeTreeHandle(linkedHandle, output)
+    else await exportTree(output)
+    fileBaseline = cloneTree(output)
+    const destination = linkedHandle ? 'file aggiornato' : 'nuovo file scaricato'
+    showToast(action === 'merge'
+      ? mergeConflicts ? `Modifiche unite; ${mergeConflicts} conflitti risolti con i valori locali (${destination})` : `Modifiche unite; ${destination}`
+      : linkedHandle ? 'File esterno sovrascritto' : 'Copia locale salvata in un nuovo file')
+    pendingFileConflict.value = null
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Non è stato possibile risolvere il conflitto', 'error')
+  } finally { conflictBusy.value = false }
+}
+async function createNewTree() {
+  linkedHandle = null
+  linkedFileName.value = null
+  fileBaseline = null
+  try { await forgetFileHandle() } catch { /* La sessione è già scollegata. */ }
   tree.value = emptyTree()
   selectedPersonId.value = null
   activeView.value = 'tree'
@@ -545,14 +704,22 @@ watch(() => [tree.value.name, tree.value.people, tree.value.relationships], () =
 onMounted(async () => {
   try { sidebarCollapsed.value = localStorage.getItem(sidebarPreferenceKey) === 'true' } catch { /* Use the default layout if storage is unavailable. */ }
   try {
-    const local = await loadLocal()
+    const [handle, local] = await Promise.all([getRememberedFileHandle(), loadLocal()])
     // Le vecchie installazioni potevano contenere un archivio dimostrativo.
     // Non lo ripristiniamo: gli alberi reali hanno identificativi differenti.
-    if (local && local.id !== 'tree-moretti') tree.value = local
-  } catch { showToast('Salvataggio locale non disponibile', 'error') }
-  selectedPersonId.value = tree.value.people[0]?.id ?? null
-  hydrated.value = true
-  refit()
+    startupLocal = local && local.id !== 'tree-moretti' ? local : null
+    startupHandle = handle
+    if (handle) startupPrompt.value = { kind: 'file', name: handle.name }
+    else if (startupLocal) startupPrompt.value = { kind: 'local', name: startupLocal.name }
+    else hydrated.value = true
+  } catch {
+    hydrated.value = true
+    showToast('Salvataggio locale non disponibile', 'error')
+  }
+  if (!startupPrompt.value) {
+    selectedPersonId.value = tree.value.people[0]?.id ?? null
+    refit()
+  }
 })
 </script>
 
@@ -580,7 +747,7 @@ onMounted(async () => {
           <button aria-label="Apri archivio" title="Apri archivio" @click="mobileNavOpen = false; chooseFile()"><FolderOpen :size="18" /><span>Apri archivio</span></button>
           <button aria-label="Salva file .genia" title="Salva file .genia" @click="mobileNavOpen = false; saveFile()"><Save :size="18" /><span>Salva file .genia</span></button>
         </div>
-        <div class="save-state" :class="saveState" role="status" :aria-label="saveStatusLabel" :title="saveStatusLabel"><Check v-if="saveState === 'saved'" :size="16" /><Info v-else-if="saveState === 'error'" :size="16" /><Save v-else :size="16" /><span>{{ saveStatusLabel }}</span></div>
+        <div class="save-state" :class="saveState" role="status" :aria-label="linkedFileName ? `${saveStatusLabel}; file collegato ${linkedFileName}` : saveStatusLabel" :title="linkedFileName ? `File collegato: ${linkedFileName}` : saveStatusLabel"><Check v-if="saveState === 'saved'" :size="16" /><Info v-else-if="saveState === 'error'" :size="16" /><Save v-else :size="16" /><span>{{ linkedFileName ? `Collegato: ${linkedFileName}` : saveStatusLabel }}</span></div>
         <div class="sidebar-note"><ShieldCheck :size="18" /><div><strong>Privato per natura</strong><p>I dati non lasciano mai questo dispositivo.</p></div></div>
       </div>
     </aside>
@@ -770,6 +937,18 @@ onMounted(async () => {
       <div class="form-actions"><button class="button subtle" @click="modal = null; pendingRelationshipId = null">Annulla</button><button class="button danger" @click="confirmDeleteRelationship"><Trash2 :size="16" />Rimuovi legame</button></div>
     </ModalShell>
     <ModalShell v-if="modal === 'new-tree'" title="Creare un nuovo albero?" subtitle="La copia locale attuale verrà sostituita." @close="modal = null"><div class="warning-note"><Info :size="19" /><p>Esporta prima un file .genia se vuoi conservare l’albero “{{ tree.name }}”.</p></div><div class="form-actions"><button class="button subtle" @click="modal = null">Torna indietro</button><button class="button danger" @click="createNewTree"><FilePlus2 :size="16" />Crea albero vuoto</button></div></ModalShell>
+
+    <ModalShell v-if="!hydrated && !startupPrompt" title="Controllo dell’archivio" subtitle="Verifico se esiste un file usato in precedenza prima di abilitare le modifiche." :closable="false">
+      <div class="warning-note"><Save :size="19" /><p>Attendi un momento…</p></div>
+    </ModalShell>
+    <ModalShell v-if="startupPrompt" title="Riaprire l’archivio precedente?" :subtitle="startupPrompt.kind === 'file' ? `Rileggerò “${startupPrompt.name}” direttamente dal disco, così non lavorerai su una copia superata.` : `È disponibile la copia locale “${startupPrompt.name}”.`" :closable="false">
+      <div class="warning-note"><ShieldCheck :size="19" /><p>Finché non scegli, la modifica dei dati resta bloccata. Se riapri un file collegato, viene sempre ricaricato prima di consentire qualsiasi azione.</p></div>
+      <div class="form-actions"><button class="button subtle" :disabled="startupBusy" @click="declinePrevious">No, crea nuovo</button><button class="button primary" :disabled="startupBusy" @click="reopenPrevious"><FolderOpen :size="16" />{{ startupBusy ? 'Ricaricamento…' : 'Sì, riapri' }}</button></div>
+    </ModalShell>
+    <ModalShell v-if="pendingFileConflict" title="Il file contiene modifiche più recenti" :subtitle="`“${pendingFileConflict.name}” è cambiato dopo che lo hai aperto. Scegli come salvare senza perdere dati.`" :closable="!conflictBusy" @close="pendingFileConflict = null">
+      <div class="warning-note"><Info :size="19" /><p><strong>Unisci modifiche</strong> conserva persone e legami aggiunti su entrambe le copie e combina le modifiche fatte a campi diversi. Se lo stesso campo è stato cambiato da entrambe le parti, mantiene il valore di questo dispositivo.</p></div>
+      <div class="form-actions conflict-actions"><button class="button subtle" :disabled="conflictBusy" @click="pendingFileConflict = null">Annulla</button><button class="button danger" :disabled="conflictBusy" @click="resolveFileConflict('overwrite')">Sovrascrivi</button><button class="button primary" :disabled="conflictBusy" @click="resolveFileConflict('merge')"><GitFork :size="16" />{{ conflictBusy ? 'Verifica…' : 'Unisci modifiche' }}</button></div>
+    </ModalShell>
 
     <Transition name="toast"><div v-if="toast" class="toast" :class="toast.tone"><Check v-if="toast.tone === 'success'" :size="17" /><Info v-else :size="17" />{{ toast.message }}</div></Transition>
   </div>

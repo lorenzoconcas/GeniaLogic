@@ -2,13 +2,18 @@ import type { FamilyTree } from '../types'
 
 const DB_NAME = 'genia-local'
 const STORE_NAME = 'trees'
+const META_STORE_NAME = 'metadata'
 const ACTIVE_KEY = 'active'
+const FILE_HANDLE_KEY = 'active-file-handle'
 const MAGIC = new Uint8Array([0x47, 0x45, 0x4e, 0x49, 0x41, 0x01, 0x0d, 0x0a])
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME)
+    const request = indexedDB.open(DB_NAME, 2)
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) request.result.createObjectStore(STORE_NAME)
+      if (!request.result.objectStoreNames.contains(META_STORE_NAME)) request.result.createObjectStore(META_STORE_NAME)
+    }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
@@ -114,4 +119,74 @@ export async function exportTree(tree: FamilyTree): Promise<'picker' | 'download
 
 export async function importTree(file: File): Promise<FamilyTree> {
   return decodeTree(file)
+}
+
+export interface GeniaFileHandle {
+  name: string
+  getFile: () => Promise<File>
+  createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>
+  queryPermission?: (options: { mode: 'readwrite' }) => Promise<PermissionState>
+  requestPermission?: (options: { mode: 'readwrite' }) => Promise<PermissionState>
+}
+
+export interface OpenedTreeFile {
+  tree: FamilyTree
+  lastModified: number
+  name: string
+}
+
+async function metadataRequest<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  const db = await openDatabase()
+  const result = await new Promise<T>((resolve, reject) => {
+    const request = action(db.transaction(META_STORE_NAME, mode).objectStore(META_STORE_NAME))
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  db.close()
+  return result
+}
+
+export async function rememberFileHandle(handle: GeniaFileHandle): Promise<void> {
+  await metadataRequest('readwrite', (store) => store.put(handle, FILE_HANDLE_KEY))
+}
+
+export async function getRememberedFileHandle(): Promise<GeniaFileHandle | null> {
+  return (await metadataRequest('readonly', (store) => store.get(FILE_HANDLE_KEY))) ?? null
+}
+
+export async function forgetFileHandle(): Promise<void> {
+  await metadataRequest('readwrite', (store) => store.delete(FILE_HANDLE_KEY))
+}
+
+export async function ensureFilePermission(handle: GeniaFileHandle): Promise<boolean> {
+  if (!handle.queryPermission) return true
+  if (await handle.queryPermission({ mode: 'readwrite' }) === 'granted') return true
+  return handle.requestPermission ? await handle.requestPermission({ mode: 'readwrite' }) === 'granted' : false
+}
+
+export async function readTreeHandle(handle: GeniaFileHandle): Promise<OpenedTreeFile> {
+  const file = await handle.getFile()
+  return { tree: await decodeTree(file), lastModified: file.lastModified, name: file.name }
+}
+
+export async function writeTreeHandle(handle: GeniaFileHandle, tree: FamilyTree): Promise<void> {
+  const writable = await handle.createWritable()
+  await writable.write(await encodeTree(tree))
+  await writable.close()
+}
+
+export async function pickTreeHandle(): Promise<GeniaFileHandle | null> {
+  const picker = (window as Window & { showOpenFilePicker?: (options: unknown) => Promise<GeniaFileHandle[]> }).showOpenFilePicker?.bind(window)
+  if (!picker) return null
+  const [handle] = await picker({ multiple: false, types: [{ description: 'Archivio GeniaLogic', accept: { 'application/x-genia-family-tree': ['.genia'] } }] })
+  return handle ?? null
+}
+
+export async function createTreeHandle(tree: FamilyTree): Promise<GeniaFileHandle | null> {
+  const suggestedName = `${safeFileName(tree.name)}.genia`
+  const picker = (window as Window & { showSaveFilePicker?: (options: unknown) => Promise<GeniaFileHandle> }).showSaveFilePicker?.bind(window)
+  if (!picker) return null
+  const handle = await picker({ suggestedName, types: [{ description: 'Archivio GeniaLogic', accept: { 'application/x-genia-family-tree': ['.genia'] } }] })
+  await writeTreeHandle(handle, tree)
+  return handle
 }

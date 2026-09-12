@@ -43,6 +43,8 @@ Riferimento: [pubblicazione Vite su GitHub Pages](https://vite.dev/guide/static-
 
 GeniaLogic mantiene automaticamente una copia dell'albero nel database locale del browser. Dalla sezione **Archivio** è possibile salvare e riaprire file `.genia` esterni.
 
+Nei browser che supportano l'accesso diretto ai file, l'archivio scelto resta collegato: alla riapertura della scheda GeniaLogic chiede conferma e rilegge il file dal disco prima di abilitare le modifiche. Prima di riscriverlo verifica inoltre che non sia stato aggiornato altrove; in caso di conflitto consente di annullare, sovrascrivere oppure unire le copie per persona, legame e singolo campo.
+
 Il formato `.genia` contiene dati JSON compressi con Gzip e un'intestazione proprietaria. Non è cifrato: il file va conservato come un normale documento personale.
 
 La pubblicazione rende accessibile l’app, ma non carica gli alberi su GitHub.

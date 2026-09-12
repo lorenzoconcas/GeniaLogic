@@ -274,6 +274,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .relationship-confirm span { color:#6667cf; font-size:.72rem; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
 .relationship-confirm strong { overflow:hidden; text-overflow:ellipsis; color:var(--ink); font-size:.92rem; }
 .modal-body .button { min-height:2.7rem; font-size:.9rem; }
+.conflict-actions { flex-wrap:wrap; }
 .toast { position:fixed; right:1rem; bottom:1rem; z-index:150; display:flex; align-items:center; gap:.45rem; border-radius:.7rem; background:#263f36; padding:.72rem .9rem; color:white; font-size:.7rem; font-weight:750; box-shadow:0 12px 32px rgba(20,30,26,.24); }
 .toast.error { background:#934c3a; }
 .toast-enter-active,.toast-leave-active { transition:opacity .2s,transform .2s; }
