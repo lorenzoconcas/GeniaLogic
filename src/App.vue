@@ -44,6 +44,19 @@ const search = ref('')
 const mobileNavOpen = ref(false)
 const sidebarCollapsed = ref(false)
 const appIconUrl = `${import.meta.env.BASE_URL}genialogic.svg`
+const appBuildCode = __APP_BUILD_CODE__
+const appBuildMoment = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(__APP_BUILD_TIMESTAMP__))
+const appCommitHash = __APP_COMMIT_HASH__
+const buildInfoMode = ref<'version' | 'date' | 'commit'>('version')
+const buildInfoLabel = computed(() => buildInfoMode.value === 'version'
+  ? `Versione ${appBuildCode}`
+  : buildInfoMode.value === 'date' ? `Build del ${appBuildMoment}` : `Commit ${appCommitHash}`)
+const buildInfoAction = computed(() => buildInfoMode.value === 'version'
+  ? 'Mostra data e ora della build'
+  : buildInfoMode.value === 'date' ? 'Mostra hash del commit' : 'Mostra versione')
+function cycleBuildInfo() {
+  buildInfoMode.value = buildInfoMode.value === 'version' ? 'date' : buildInfoMode.value === 'date' ? 'commit' : 'version'
+}
 const sidebarPreferenceKey = 'genialogic.sidebar-collapsed'
 const modal = ref<'person' | 'relative' | 'couple-child' | 'relationship' | 'delete-person' | 'delete-relationship' | 'new-tree' | null>(null)
 const editingPersonId = ref<string | null>(null)
@@ -729,7 +742,10 @@ onMounted(async () => {
     <input ref="fileInput" class="sr-only" type="file" aria-label="Apri archivio GeniaLogic (.genia)" @change="openFile" />
     <aside id="main-sidebar" class="sidebar" :class="{ open: mobileNavOpen }" aria-label="Navigazione e comandi" @keydown.esc="mobileNavOpen = false">
       <div class="sidebar-brand-row">
-        <button class="brand" aria-label="GeniaLogic — Vai all’albero" title="GeniaLogic — Vai all’albero" @click="goTo('tree')"><img class="brand-mark" :src="appIconUrl" alt="" width="32" height="32" /><span><strong>GeniaLogic</strong></span></button>
+        <div class="brand">
+          <button class="brand-home" aria-label="GeniaLogic — Vai all’albero" title="Vai all’albero" @click="goTo('tree')"><img class="brand-mark" :src="appIconUrl" alt="" width="32" height="32" /></button>
+          <div class="brand-copy"><button class="brand-name" @click="goTo('tree')">GeniaLogic</button><button class="brand-build-meta" :aria-label="`${buildInfoLabel}; ${buildInfoAction}`" :title="buildInfoAction" @click="cycleBuildInfo">{{ buildInfoLabel }}</button></div>
+        </div>
         <button class="icon-button sidebar-toggle" :aria-label="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'" :title="sidebarCollapsed ? 'Espandi sidebar' : 'Comprimi sidebar'" :aria-expanded="!sidebarCollapsed" aria-controls="main-sidebar" @click="toggleSidebar"><PanelLeftOpen v-if="sidebarCollapsed" :size="20" /><PanelLeftClose v-else :size="20" /></button>
         <button class="icon-button mobile-menu" aria-label="Chiudi navigazione" aria-controls="main-sidebar" @click="mobileNavOpen = false"><X :size="20" /></button>
       </div>

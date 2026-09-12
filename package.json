@@ -1,7 +1,10 @@
 {
   "name": "genialogic",
   "private": true,
-  "version": "0.0.0",
+  "version": "26.0.0",
+  "config": {
+    "appBuildCode": "26A428"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

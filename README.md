@@ -19,6 +19,16 @@ npm run preview
 Lo sviluppo usa `http://localhost:5173/`. L’anteprima della build usa
 `http://localhost:4173/GeniaLogic/` (le porte possono variare se occupate).
 
+## Versione
+
+L'app usa un codice build ispirato a quello dei sistemi operativi Apple. La build
+corrente è **26A428**: `26` identifica la generazione, `A` la linea di release e
+`428` il numero progressivo della build. Poiché il codice Apple non contiene una
+data decodificabile con certezza, Vite inserisce automaticamente data e ora della
+build. La riga della versione nella sidebar cicla al clic tra codice versione,
+data e ora della build e short hash del commit Git compilato. La versione tecnica
+rimane `26.0.0` per rispettare SemVer.
+
 ## GitHub Pages
 
 Indirizzo del sito: **https://lorenzoconcas.github.io/GeniaLogic/**.
