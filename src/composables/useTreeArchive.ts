@@ -54,6 +54,13 @@ export function useTreeArchive(
   function cloneTree(value: FamilyTree): FamilyTree {
     return JSON.parse(JSON.stringify(value)) as FamilyTree
   }
+
+  // Un archivio appena creato può essere stato scritto automaticamente dal browser,
+  // ma non richiede una decisione di ripristino finché non contiene dati genealogici.
+  function hasSavedContent(value: FamilyTree | null): value is FamilyTree {
+    return Boolean(value && (value.people.length > 0 || value.relationships.length > 0))
+  }
+
   // La baseline rappresenta l’ultima copia letta o scritta: serve a rilevare modifiche esterne.
   function sameTree(left: FamilyTree, right: FamilyTree) {
     return JSON.stringify(left) === JSON.stringify(right)
@@ -305,7 +312,7 @@ export function useTreeArchive(
       const [handle, local] = await Promise.all([getRememberedFileHandle(), loadLocal()])
       // Le vecchie installazioni potevano contenere un archivio dimostrativo.
       // Non lo ripristiniamo: gli alberi reali hanno identificativi differenti.
-      startupLocal = local && local.id !== 'tree-moretti' ? local : null
+      startupLocal = local?.id !== 'tree-moretti' && hasSavedContent(local) ? local : null
       startupHandle = handle
       if (handle) startupPrompt.value = { kind: 'file', name: handle.name }
       else if (startupLocal) startupPrompt.value = { kind: 'local', name: startupLocal.name }

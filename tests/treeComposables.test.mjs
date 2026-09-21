@@ -114,7 +114,7 @@ test('adding a parent from the radial view preserves the child selection', () =>
   assert.equal(tree.value.relationships[0].targetId, 'child')
 })
 
-function archiveSetup({ remembered = true } = {}) {
+function archiveSetup({ remembered = true, localTree = family([person('stale')]) } = {}) {
   let mount
   let disk = family([person('disk')])
   const writes = []
@@ -131,7 +131,7 @@ function archiveSetup({ remembered = true } = {}) {
   const handle = { name: 'famiglia.genia' }
   const storage = {
     getRememberedFileHandle: async () => (remembered ? handle : null),
-    loadLocal: async () => family([person('stale')]),
+    loadLocal: async () => localTree,
     ensureFilePermission: async () => true,
     readTreeHandle: async () => ({ tree: clone(disk), name: handle.name, lastModified: 1 }),
     rememberFileHandle: async () => {},
@@ -194,6 +194,18 @@ function archiveSetup({ remembered = true } = {}) {
     },
   }
 }
+
+test('does not interrupt startup for an empty local tree without a linked file', async () => {
+  const state = archiveSetup({ remembered: false, localTree: family() })
+  try {
+    await state.mount()
+    assert.equal(state.archive.hydrated.value, true)
+    assert.equal(state.archive.startupPrompt.value, null)
+    assert.equal(state.selection.value, null)
+  } finally {
+    state.scope.stop()
+  }
+})
 
 test('archive waits for startup choice, reloads disk, and detects changes again before overwrite', async () => {
   const state = archiveSetup()

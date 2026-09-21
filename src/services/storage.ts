@@ -154,9 +154,20 @@ function safeFileName(name: string) {
   )
 }
 
+/**
+ * Il primo nodo viene creato come radice dell’albero: usarlo nel nome aiuta a
+ * ritrovare un archivio esportato anche quando il nome dell’albero è rimasto
+ * quello predefinito.
+ */
+export function suggestedTreeFileName(tree: FamilyTree) {
+  const root = tree.people[0]
+  const source = root ? `${root.firstName} ${root.lastName}` : tree.name
+  return `${safeFileName(source)}.genia`
+}
+
 export async function exportTree(tree: FamilyTree): Promise<'picker' | 'download'> {
   const blob = await encodeTree(tree)
-  const suggestedName = `${safeFileName(tree.name)}.genia`
+  const suggestedName = suggestedTreeFileName(tree)
   const picker = (
     window as Window & {
       showSaveFilePicker?: (
@@ -277,7 +288,7 @@ export async function pickTreeHandle(): Promise<GeniaFileHandle | null> {
 }
 
 export async function createTreeHandle(tree: FamilyTree): Promise<GeniaFileHandle | null> {
-  const suggestedName = `${safeFileName(tree.name)}.genia`
+  const suggestedName = suggestedTreeFileName(tree)
   const picker = (
     window as Window & { showSaveFilePicker?: (options: unknown) => Promise<GeniaFileHandle> }
   ).showSaveFilePicker?.bind(window)

@@ -81,7 +81,7 @@ export const relationshipOptions: RelationshipOption[] = [
 ]
 
 export const personColors = [
-  '#5657d9',
+  '#2196f3',
   '#ee6a5f',
   '#0f9b8e',
   '#e5a12b',

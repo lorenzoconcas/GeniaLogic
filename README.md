@@ -85,8 +85,11 @@ Se un provider cloud non rende leggibile il documento, scaricalo o copialo in
   rispettivamente le viste, i moduli e la scheda della persona selezionata.
 - `src/services/` contiene algoritmi genealogici, accesso allo storage,
   esportazione e funzioni di presentazione indipendenti dai componenti.
-- `src/styles/` divide gli stili in base, struttura dell’app, albero, liste,
-  moduli e adattamenti responsive. `src/style.css` ne conserva l’ordine di importazione.
+- I componenti usano utility Tailwind direttamente nei template. `src/style.css`
+  definisce soltanto il tema condiviso, i default accessibili dei controlli nativi
+  e gli stili del pacchetto Vue Flow.
+- `src/components/AppButton.vue` e `FormField.vue` raccolgono le combinazioni
+  Tailwind ripetute per pulsanti e campi, senza reintrodurre fogli CSS per pagina.
 - `src/types.ts` definisce i dati salvati; `src/uiTypes.ts` e `src/editorOptions.ts`
   raccolgono tipi e opzioni dell’interfaccia.
 
