@@ -197,12 +197,13 @@ async function exportChart(format: 'svg' | 'png') {
 
 <template>
   <section
-    class="ancestor-tree"
+    class="flex flex-col w-full h-full min-h-0 bg-[#fafbfe] bg-none"
     aria-label="Vista degli antenati"
   >
-    <div class="ancestor-toolbar">
-      <div class="ancestor-search-row">
+    <div class="p-[0.65rem] relative z-10 border-b border-b-[#dce0eb] bg-[#f8f9fd] bg-none">
+      <div class="flex items-center gap-[0.55rem]">
         <button
+          class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer disabled:opacity-45 disabled:cursor-default focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
           type="button"
           :disabled="!previous"
           @click="back"
@@ -216,17 +217,27 @@ async function exportChart(format: 'svg' | 'png') {
           @select-person="emit('selectPerson', $event)"
         />
       </div>
-      <div class="ancestor-settings">
-        <label>
+      <div class="flex items-center gap-[0.55rem] flex-wrap mt-[0.65rem]">
+        <label
+          class="flex items-center gap-[0.4rem] text-[#596176] text-[0.875rem] max-[600px]:flex-col max-[600px]:items-start"
+        >
           Orientamento
-          <select v-model="orientation">
+          <select
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
+            v-model="orientation"
+          >
             <option value="horizontal">Orizzontale →</option>
             <option value="vertical">Verticale ↑</option>
           </select>
         </label>
-        <label>
+        <label
+          class="flex items-center gap-[0.4rem] text-[#596176] text-[0.875rem] max-[600px]:flex-col max-[600px]:items-start"
+        >
           Generazioni
-          <select v-model.number="generations">
+          <select
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
+            v-model.number="generations"
+          >
             <option
               v-for="n in 10"
               :key="n"
@@ -237,19 +248,21 @@ async function exportChart(format: 'svg' | 'png') {
           </select>
         </label>
         <div
-          class="ancestor-buttons"
+          class="flex items-center gap-[0.55rem]"
           role="group"
           aria-label="Zoom"
         >
           <button
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer disabled:opacity-45 disabled:cursor-default focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
             type="button"
             aria-label="Riduci zoom"
             @click="zoomBy(1 / 1.3)"
           >
             <Minus :size="17" />
           </button>
-          <span>{{ Math.round(zoom * 100) }}%</span>
+          <span class="min-w-10 text-center text-[0.875rem]">{{ Math.round(zoom * 100) }}%</span>
           <button
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer disabled:opacity-45 disabled:cursor-default focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
             type="button"
             aria-label="Aumenta zoom"
             @click="zoomBy(1.3)"
@@ -257,6 +270,7 @@ async function exportChart(format: 'svg' | 'png') {
             <Plus :size="17" />
           </button>
           <button
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer disabled:opacity-45 disabled:cursor-default focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
             type="button"
             aria-label="Adatta tutti gli antenati alla vista"
             title="Adatta alla vista"
@@ -266,11 +280,12 @@ async function exportChart(format: 'svg' | 'png') {
           </button>
         </div>
         <div
-          class="ancestor-buttons"
+          class="flex items-center gap-[0.55rem]"
           role="group"
           aria-label="Esporta antenati"
         >
           <button
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer disabled:opacity-45 disabled:cursor-default focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
             type="button"
             :disabled="busy || !result.chart"
             @click="exportChart('png')"
@@ -278,6 +293,7 @@ async function exportChart(format: 'svg' | 'png') {
             PNG
           </button>
           <button
+            class="border border-[#cbd0e0] px-[0.6rem] py-[0.4rem] inline-flex items-center justify-center gap-[0.3rem] min-h-10 rounded-lg bg-white bg-none text-[#4546bc] text-[0.875rem] cursor-pointer disabled:opacity-45 disabled:cursor-default focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px]"
             type="button"
             :disabled="busy || !result.chart"
             @click="exportChart('svg')"
@@ -286,21 +302,22 @@ async function exportChart(format: 'svg' | 'png') {
           </button>
         </div>
       </div>
-      <p class="ancestor-root">
+      <p class="mx-0 mt-[0.55rem] mb-0 text-[0.875rem] text-[#596176] wrap-anywhere">
         Antenati di
         <strong>{{ root?.firstName }} {{ root?.lastName }}</strong>
       </p>
       <p
+        class="mx-0 mt-[0.55rem] mb-0 text-[0.875rem] text-[#596176] wrap-anywhere data-ancestor-error:text-[#a52639]"
         v-if="status"
         role="status"
-        :class="{ 'ancestor-error': failed }"
+        :data-ancestor-error="failed || undefined"
       >
         {{ status }}
       </p>
     </div>
     <div
       ref="viewport"
-      class="ancestor-viewport"
+      class="p-[12px] flex-1 min-h-32 overflow-auto overscroll-contain"
       tabindex="0"
       aria-label="Grafico degli antenati: usa lo zoom e scorri per esplorare"
       @scroll="closeDetails"
@@ -309,12 +326,13 @@ async function exportChart(format: 'svg' | 'png') {
     >
       <p
         v-if="result.error"
-        class="ancestor-error"
+        class="data-[state~=ancestor-error]:text-[#a52639]"
         role="alert"
       >
         {{ result.error }}
       </p>
       <svg
+        class="m-auto block max-w-[none]"
         v-if="result.chart"
         :width="result.chart.width * zoom"
         :height="result.chart.height * zoom"
@@ -353,8 +371,8 @@ async function exportChart(format: 'svg' | 'png') {
         <g
           v-for="node in result.chart.nodes"
           :key="node.id"
-          class="ancestor-person"
-          :class="{ 'details-visible': hoveredNodeId === node.id }"
+          class="group/ancestor-person cursor-pointer outline-none"
+          :data-details-visible="hoveredNodeId === node.id || undefined"
           role="button"
           tabindex="0"
           :aria-describedby="hoveredNodeId === node.id ? detailsId : undefined"
@@ -369,6 +387,7 @@ async function exportChart(format: 'svg' | 'png') {
           @keydown.space.prevent="selectAncestor(node.person.id)"
         >
           <rect
+            class="group-hover/ancestor-person:stroke-[#3637b8] group-hover/ancestor-person:stroke-[5] group-hover/ancestor-person:fill-[#ededff] group-focus-visible/ancestor-person:stroke-[#3637b8] group-focus-visible/ancestor-person:stroke-[5] group-focus-visible/ancestor-person:fill-[#ededff] group-data-details-visible/ancestor-person:stroke-[#3637b8] group-data-details-visible/ancestor-person:stroke-[5] group-data-details-visible/ancestor-person:fill-[#ededff]"
             :x="node.x"
             :y="node.y"
             :width="result.chart.cardWidth"
@@ -406,159 +425,33 @@ async function exportChart(format: 'svg' | 'png') {
       @leave="leaveDetails"
       @close="closeDetails"
     />
-    <div class="ancestor-footer">
-      <span>
-        <i />
+    <div
+      class="p-[0.65rem] flex flex-wrap gap-3 border-t border-t-[#dce0eb] text-[#596176] text-[0.875rem]"
+    >
+      <span class="flex items-center gap-[0.4rem]">
+        <i class="w-6 border-t-[2px] border-t-[#596176]" />
         Biologico
       </span>
-      <span>
-        <i class="adoptive" />
+      <span class="flex items-center gap-[0.4rem]">
+        <i class="border-[#5657d9] w-6 border-t-[2px] [border-top-style:dashed]" />
         Adottivo
       </span>
-      <span>
-        <i class="foster" />
+      <span class="flex items-center gap-[0.4rem]">
+        <i class="border-[#b46619] w-6 border-t-[2px] [border-top-style:dotted]" />
         Affido
       </span>
-      <p v-if="result.chart?.nodes.length === 1">Nessun antenato registrato per questa persona.</p>
+      <p
+        class="m-0 basis-full"
+        v-if="result.chart?.nodes.length === 1"
+      >
+        Nessun antenato registrato per questa persona.
+      </p>
       <p
         v-else-if="result.chart?.cycles"
-        class="ancestor-error"
+        class="m-0 basis-full data-[state~=ancestor-error]:text-[#a52639]"
       >
         Rilevato un ciclo nei legami: il ramo interessato è interrotto.
       </p>
     </div>
   </section>
 </template>
-
-<style scoped>
-.ancestor-tree {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  background: #fafbfe;
-}
-.ancestor-toolbar {
-  position: relative;
-  z-index: 10;
-  padding: 0.65rem;
-  border-bottom: 1px solid #dce0eb;
-  background: #f8f9fd;
-}
-.ancestor-search-row,
-.ancestor-settings,
-.ancestor-buttons {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-}
-.ancestor-settings {
-  flex-wrap: wrap;
-  margin-top: 0.65rem;
-}
-.ancestor-toolbar button,
-.ancestor-toolbar select {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  min-height: 2.5rem;
-  border: 1px solid #cbd0e0;
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.6rem;
-  background: white;
-  color: #4546bc;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-.ancestor-toolbar button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.ancestor-toolbar button:focus-visible,
-.ancestor-toolbar select:focus-visible {
-  outline: 2px solid #5657d9;
-  outline-offset: 2px;
-}
-.ancestor-settings label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #596176;
-  font-size: 0.875rem;
-}
-.ancestor-buttons span {
-  min-width: 2.5rem;
-  text-align: center;
-  font-size: 0.875rem;
-}
-.ancestor-toolbar p {
-  margin: 0.55rem 0 0;
-  font-size: 0.875rem;
-  color: #596176;
-  overflow-wrap: anywhere;
-}
-.ancestor-viewport {
-  flex: 1;
-  min-height: 8rem;
-  overflow: auto;
-  padding: 12px;
-  overscroll-behavior: contain;
-}
-.ancestor-viewport > svg {
-  display: block;
-  max-width: none;
-  margin: auto;
-}
-.ancestor-person {
-  cursor: pointer;
-  outline: none;
-}
-.ancestor-person:hover rect,
-.ancestor-person:focus-visible rect,
-.ancestor-person.details-visible rect {
-  stroke: #3637b8;
-  stroke-width: 5;
-  fill: #ededff;
-}
-.ancestor-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.65rem;
-  border-top: 1px solid #dce0eb;
-  color: #596176;
-  font-size: 0.875rem;
-}
-.ancestor-footer span {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.ancestor-footer i {
-  width: 1.5rem;
-  border-top: 2px solid #596176;
-}
-.ancestor-footer .adoptive {
-  border-color: #5657d9;
-  border-top-style: dashed;
-}
-.ancestor-footer .foster {
-  border-color: #b46619;
-  border-top-style: dotted;
-}
-.ancestor-footer p {
-  flex-basis: 100%;
-  margin: 0;
-}
-.ancestor-tree .ancestor-error {
-  color: #a52639;
-}
-@media (max-width: 600px) {
-  .ancestor-settings label {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-</style>

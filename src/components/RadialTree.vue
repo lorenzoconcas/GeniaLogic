@@ -429,12 +429,14 @@ function addMissingParent(slot: FanSlot) {
 
 <template>
   <section
-    class="radial-tree"
+    class="relative grid grid-rows-[auto_minmax(12rem,_1fr)_auto] w-full h-full min-h-120 overflow-auto bg-[radial-gradient(circle_at_50%_100%,_#fff_0,_#f8f9fd_55%,_#f2f4fa_100%)] bg-transparent"
     :aria-label="`${viewLabel} genealogico`"
   >
-    <header class="radial-toolbar">
+    <header
+      class="border border-[rgba(218,_221,_234,_0.9)] px-[0.7rem] py-[0.55rem] mx-3 relative z-5 mt-3 mb-0 flex flex-wrap items-center justify-between gap-4 rounded-[0.65rem] bg-[rgba(255,_255,_255,_0.92)] bg-none shadow-[0_5px_18px_rgba(35,_39,_68,_0.07)] backdrop-blur-[8px] max-[600px]:items-center max-[600px]:gap-[0.45rem]"
+    >
       <button
-        class="radial-back"
+        class="border border-[#d8dbea] px-[0.6rem] py-[0.45rem] inline-flex items-center justify-center gap-[0.35rem] shrink-0 min-h-10 rounded-lg bg-[#f7f8fc] bg-none text-[#4546bc] text-[0.875rem] font-[750] cursor-pointer hover:enabled:border-[#9293e4] hover:enabled:bg-[#eeeeff] hover:enabled:bg-none disabled:opacity-45 disabled:cursor-default"
         type="button"
         :disabled="!previousPerson"
         :title="
@@ -448,16 +450,27 @@ function addMissingParent(slot: FanSlot) {
         <ArrowLeft :size="18" />
         Indietro
       </button>
-      <div>
-        <span>Persona al centro</span>
-        <strong>
+      <div class="grid flex-1 gap-[0.12rem] min-w-0">
+        <span class="text-[#73798c] text-[0.58rem] font-extrabold tracking-[0.08em] uppercase">
+          Persona al centro
+        </span>
+        <strong class="overflow-hidden text-ellipsis whitespace-nowrap text-[0.72rem]">
           {{ rootPerson ? `${rootPerson.firstName} ${rootPerson.lastName}` : 'Nessuna persona' }}
         </strong>
       </div>
-      <label>
-        <span>Generazioni</span>
-        <span class="generation-select">
-          <select v-model.number="generations">
+      <label class="flex items-center gap-[0.45rem]">
+        <span
+          class="text-[#73798c] text-[0.58rem] font-extrabold tracking-[0.08em] uppercase max-[600px]:first:hidden"
+        >
+          Generazioni
+        </span>
+        <span
+          class="text-[#73798c] text-[0.58rem] font-extrabold tracking-[0.08em] uppercase relative flex items-center max-[600px]:first:hidden"
+        >
+          <select
+            class="border border-[#d8dbea] py-[0.38rem] appearance-none min-w-[3.2rem] rounded-lg bg-[#f7f8fc] bg-none pr-[1.35rem] pl-[0.55rem] text-[#35394d] text-[0.72rem] font-extrabold outline-none cursor-pointer"
+            v-model.number="generations"
+          >
             <option
               v-for="count in [3, 4, 5, 6, 7, 8, 9, 10]"
               :key="count"
@@ -466,15 +479,21 @@ function addMissingParent(slot: FanSlot) {
               {{ count }}
             </option>
           </select>
-          <ChevronDown :size="14" />
+          <ChevronDown
+            class="absolute right-[0.35rem] text-[#73798c] pointer-events-none"
+            :size="14"
+          />
         </span>
       </label>
       <fieldset
-        class="fan-export"
+        class="group/fan-export p-0 m-0 border-0 border-transparent flex gap-[0.4rem] disabled:opacity-50"
         :disabled="exporting || !rootPerson"
       >
-        <legend>Esporta {{ viewLabel.toLowerCase() }}</legend>
+        <legend class="mb-[0.2rem] text-[0.875rem] text-[#4d536b]">
+          Esporta {{ viewLabel.toLowerCase() }}
+        </legend>
         <button
+          class="border border-[#d8dbea] px-[0.7rem] py-[0.45rem] min-h-10 rounded-lg text-[#4546bc] bg-[#f7f8fc] bg-none text-[0.875rem] font-[750] cursor-pointer hover:bg-[#eeeeff] hover:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px] group-disabled/fan-export:cursor-wait"
           type="button"
           title="Esporta un PNG ad alta risoluzione con nomi completi"
           @click="exportFan('png')"
@@ -482,6 +501,7 @@ function addMissingParent(slot: FanSlot) {
           PNG
         </button>
         <button
+          class="border border-[#d8dbea] px-[0.7rem] py-[0.45rem] min-h-10 rounded-lg text-[#4546bc] bg-[#f7f8fc] bg-none text-[0.875rem] font-[750] cursor-pointer hover:bg-[#eeeeff] hover:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px] group-disabled/fan-export:cursor-wait"
           type="button"
           title="Esporta un SVG vettoriale con nomi completi, ingrandibile senza perdita di qualità"
           @click="exportFan('svg')"
@@ -489,9 +509,14 @@ function addMissingParent(slot: FanSlot) {
           SVG
         </button>
       </fieldset>
-      <fieldset class="fan-export fan-navigation">
-        <legend>Navigazione · {{ Math.round(camera.zoom * 100) }}%</legend>
+      <fieldset
+        class="group/fan-export p-0 m-0 border-0 border-transparent flex gap-[0.4rem] disabled:opacity-50"
+      >
+        <legend class="mb-[0.2rem] text-[0.875rem] text-[#4d536b]">
+          Navigazione · {{ Math.round(camera.zoom * 100) }}%
+        </legend>
         <button
+          class="border border-[#d8dbea] px-[0.7rem] py-[0.45rem] min-h-10 rounded-lg text-[#4546bc] bg-[#f7f8fc] bg-none text-[0.875rem] font-[750] cursor-pointer grid place-items-center min-w-10 hover:bg-[#eeeeff] hover:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px] disabled:opacity-45 disabled:cursor-default group-disabled/fan-export:cursor-wait"
           type="button"
           :disabled="camera.zoom <= 1"
           aria-label="Riduci zoom del grafico"
@@ -500,6 +525,7 @@ function addMissingParent(slot: FanSlot) {
           <Minus :size="18" />
         </button>
         <button
+          class="border border-[#d8dbea] px-[0.7rem] py-[0.45rem] min-h-10 rounded-lg text-[#4546bc] bg-[#f7f8fc] bg-none text-[0.875rem] font-[750] cursor-pointer grid place-items-center min-w-10 hover:bg-[#eeeeff] hover:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px] disabled:opacity-45 disabled:cursor-default group-disabled/fan-export:cursor-wait"
           type="button"
           :disabled="camera.zoom >= maxFanZoom"
           aria-label="Aumenta zoom del grafico"
@@ -508,6 +534,7 @@ function addMissingParent(slot: FanSlot) {
           <Plus :size="18" />
         </button>
         <button
+          class="border border-[#d8dbea] px-[0.7rem] py-[0.45rem] min-h-10 rounded-lg text-[#4546bc] bg-[#f7f8fc] bg-none text-[0.875rem] font-[750] cursor-pointer grid place-items-center min-w-10 hover:bg-[#eeeeff] hover:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[2px] disabled:opacity-45 disabled:cursor-default group-disabled/fan-export:cursor-wait"
           type="button"
           title="Adatta alla vista"
           aria-label="Adatta il grafico alla vista"
@@ -516,20 +543,20 @@ function addMissingParent(slot: FanSlot) {
           <Maximize2 :size="18" />
         </button>
       </fieldset>
-      <p class="fan-navigation-hint">
+      <p class="m-0 basis-full text-[0.875rem] leading-[1.4] text-[#596176]">
         {{ navigationModifier.label }} + rotellina: zoom · {{ navigationModifier.label }} +
         trascinamento: sposta · Tastiera sul grafico: frecce, +, − e 0.
       </p>
       <p
         v-if="exporting || exportMessage"
-        class="export-message"
-        :class="{ 'export-error': exportFailed }"
+        class="m-0 basis-full text-[#4546bc] text-[0.875rem] wrap-anywhere data-export-error:text-[#a52639]"
+        :data-export-error="exportFailed || undefined"
         role="status"
         aria-live="polite"
       >
         {{ exporting ? 'Preparazione del grafico…' : exportMessage }}
       </p>
-      <div class="radial-search-row">
+      <div class="flex [flex:1_0_100%] gap-[0.12rem] min-w-0 relative z-6">
         <GraphPersonSearch
           :people="people"
           :selected-id="rootId"
@@ -541,8 +568,8 @@ function addMissingParent(slot: FanSlot) {
     <svg
       v-if="rootPerson"
       ref="fanSvg"
-      class="fan-canvas"
-      :class="{ 'fan-dragging': dragging }"
+      class="group/fan-canvas px-[0.7rem] block w-full h-full min-h-0 pt-[0.4rem] pb-[0.2rem] overflow-hidden select-none focus-visible:[outline:2px_solid_#7778df] focus-visible:outline-offset-[-3px] data-fan-dragging:[cursor:grabbing]! max-[600px]:px-[0.15rem]"
+      :data-fan-dragging="dragging || undefined"
       :viewBox="fanViewBox"
       :preserveAspectRatio="isCircle ? 'xMidYMid meet' : 'xMidYMax meet'"
       role="group"
@@ -561,12 +588,10 @@ function addMissingParent(slot: FanSlot) {
       <g
         v-for="slot in slots.filter((item) => item.generation > 0)"
         :key="`${slot.generation}-${slot.index}`"
-        class="fan-segment"
-        :class="{
-          empty: !slot.person,
-          actionable: !slot.person && slot.childId,
-          'details-visible': matchesDetails(slot),
-        }"
+        class="group/fan-segment group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
+        :data-empty="!slot.person || undefined"
+        :data-actionable="(!slot.person && slot.childId) || undefined"
+        :data-details-visible="matchesDetails(slot) || undefined"
         @pointerenter="showDetails(slot, $event)"
         @pointermove="moveDetails(slot, $event)"
         @pointerleave="leaveDetails"
@@ -574,6 +599,7 @@ function addMissingParent(slot: FanSlot) {
         @focusout="leaveDetails"
       >
         <path
+          class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! [transition:filter_0.15s,_fill_0.15s] group-has-[[role=button]]/fan-segment:group-hover/fan-segment:[filter:brightness(0.96)_saturate(1.15)] group-data-details-visible/fan-segment:stroke-[#5657d9] group-data-details-visible/fan-segment:stroke-[3px]"
           :d="geometry(slot).path"
           :fill="segmentFill(slot)"
           :stroke="segmentStroke(slot)"
@@ -581,7 +607,7 @@ function addMissingParent(slot: FanSlot) {
         />
         <g
           v-if="slot.person"
-          class="fan-person"
+          class="group/fan-person group-data-fan-dragging/fan-canvas:[cursor:grabbing]! cursor-pointer outline-none"
           tabindex="0"
           role="button"
           :aria-describedby="matchesDetails(slot) ? detailsId : undefined"
@@ -592,11 +618,13 @@ function addMissingParent(slot: FanSlot) {
           @keydown.space.prevent="emit('selectPerson', slot.person.id)"
         >
           <text
+            class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! fill-[#24283c] [paint-order:stroke] stroke-[rgba(255,_255,_255,_0.58)] stroke-[2px] [stroke-linejoin:round] group-focus-visible/fan-person:fill-[#5657d9]"
             text-anchor="middle"
             :font-size="Math.max(9, 14 - slot.generation * 0.8)"
             font-weight="750"
           >
             <tspan
+              class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
               x="0"
               dy="-2"
             >
@@ -605,7 +633,7 @@ function addMissingParent(slot: FanSlot) {
             <tspan
               x="0"
               dy="14"
-              class="fan-years"
+              class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! fill-[#73798c] text-[9px] font-[650] tracking-[0.02em]"
             >
               {{ years(slot.person) }}
             </tspan>
@@ -613,7 +641,7 @@ function addMissingParent(slot: FanSlot) {
         </g>
         <g
           v-else-if="slot.childId"
-          class="fan-add"
+          class="group/fan-add group-data-fan-dragging/fan-canvas:[cursor:grabbing]! cursor-pointer outline-none"
           tabindex="0"
           role="button"
           :aria-label="`Aggiungi ${slot.expectedGender === 'male' ? 'padre' : 'madre'} mancante`"
@@ -622,8 +650,12 @@ function addMissingParent(slot: FanSlot) {
           @keydown.enter.prevent="addMissingParent(slot)"
           @keydown.space.prevent="addMissingParent(slot)"
         >
-          <circle r="14" />
+          <circle
+            class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! fill-white stroke-[#aeb4c7] stroke-[1.5] [transition:fill_0.15s,_stroke_0.15s,_transform_0.15s] group-hover/fan-add:fill-[#5657d9] group-hover/fan-add:stroke-[#5657d9] group-hover/fan-add:[transform:scale(1.08)] group-focus-visible/fan-add:fill-[#5657d9] group-focus-visible/fan-add:stroke-[#5657d9] group-focus-visible/fan-add:[transform:scale(1.08)]"
+            r="14"
+          />
           <Plus
+            class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! p-0 w-[16px] h-[16px] text-[#686f84] pointer-events-none group-hover/fan-add:text-white group-focus-visible/fan-add:text-white"
             :x="-8"
             :y="-8"
             :size="16"
@@ -632,18 +664,20 @@ function addMissingParent(slot: FanSlot) {
       </g>
 
       <g
-        class="fan-root"
+        class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! cursor-default outline-none [filter:drop-shadow(0_8px_16px_rgba(40,_42,_82,_0.2))]"
         tabindex="0"
         role="button"
         :aria-label="`${rootPerson.firstName} ${rootPerson.lastName}, persona al centro`"
       >
         <circle
+          class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
           :cx="centerX"
           :cy="centerY"
           :r="rootRadius - 4"
           :fill="rootPerson.color"
         />
         <circle
+          class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
           :cx="centerX"
           :cy="centerY"
           :r="rootRadius - 10"
@@ -652,6 +686,7 @@ function addMissingParent(slot: FanSlot) {
           stroke-width="1.5"
         />
         <text
+          class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
           :x="centerX"
           :y="centerY - 4"
           text-anchor="middle"
@@ -659,8 +694,14 @@ function addMissingParent(slot: FanSlot) {
           font-size="16"
           font-weight="800"
         >
-          <tspan :x="centerX">{{ rootPerson.firstName }}</tspan>
           <tspan
+            class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
+            :x="centerX"
+          >
+            {{ rootPerson.firstName }}
+          </tspan>
+          <tspan
+            class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]!"
             :x="centerX"
             dy="19"
           >
@@ -669,7 +710,7 @@ function addMissingParent(slot: FanSlot) {
           <tspan
             :x="centerX"
             dy="18"
-            class="root-years"
+            class="group-data-fan-dragging/fan-canvas:[cursor:grabbing]! text-[10px] font-[650] opacity-82"
           >
             {{ years(rootPerson) }}
           </tspan>
@@ -688,46 +729,55 @@ function addMissingParent(slot: FanSlot) {
     />
     <div
       v-if="rootPerson"
-      class="fan-relatives"
+      class="p-[0.8rem] grid grid-cols-[minmax(0,_1fr)_minmax(0,_1fr)] gap-3 border-t border-t-[#dfe3ed] bg-[rgba(255,_255,_255,_0.94)] bg-none max-[440px]:grid-cols-[1fr]"
       :aria-label="`Figli e fratelli di ${rootPerson.firstName} ${rootPerson.lastName}`"
     >
       <section
         v-for="group in relativeGroups"
         :key="group.title"
-        class="fan-relative-group"
+        class="min-w-0"
         :aria-label="group.title"
       >
-        <h3>
+        <h3
+          class="mx-0 flex items-center gap-2 mt-0 mb-2 text-[#363b54] text-[0.875rem] font-extrabold"
+        >
           {{ group.title }}
-          <span>{{ group.people.length }}</span>
+          <span
+            class="px-[0.45rem] py-[0.1rem] rounded-2xl bg-[#ececff] bg-none text-[#5051b7] text-[0.75rem]"
+          >
+            {{ group.people.length }}
+          </span>
         </h3>
         <div
           v-if="group.people.length"
-          class="fan-relative-list"
+          class="p-[2px] grid content-start gap-[0.4rem] max-h-36 overflow-y-auto overscroll-contain max-[440px]:max-h-24"
         >
           <button
             v-for="person in group.people"
             :key="person.id"
             type="button"
-            class="fan-relative-card"
+            class="p-[0.6rem] border border-[#dfe3ed] flex items-center gap-[0.6rem] w-full rounded-[0.6rem] bg-white bg-none text-left cursor-pointer hover:border-[#9798e2] hover:bg-[#f5f5ff] hover:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[-2px]"
             :aria-label="`Metti al centro ${person.firstName} ${person.lastName}, ${years(person)}${person.birthPlace ? ', ' + person.birthPlace : ''}`"
             @click="emit('selectPerson', person.id)"
           >
             <span
-              class="fan-relative-avatar"
+              class="grid place-items-center [flex:0_0_2.2rem] h-[2.2rem] rounded-[0.55rem] text-white text-[0.875rem] font-extrabold uppercase"
               :style="{ background: person.color }"
               aria-hidden="true"
             >
               {{ person.firstName[0] }}{{ person.lastName[0] }}
             </span>
-            <span class="fan-relative-details">
-              <strong>{{ person.firstName }} {{ person.lastName }}</strong>
-              <small>
+            <span class="grid flex-1 min-w-0 gap-[0.15rem] wrap-anywhere">
+              <strong class="text-[0.875rem] leading-[1.35]">
+                {{ person.firstName }} {{ person.lastName }}
+              </strong>
+              <small class="text-[#626a7f] text-[0.75rem] leading-[1.4]">
                 {{ !person.birthDate && !person.deathDate ? 'Date non inserite' : years(person) }}
                 <template v-if="person.birthPlace">· {{ person.birthPlace }}</template>
               </small>
             </span>
             <ChevronRight
+              class="shrink-0 text-[#7277a8]"
               :size="16"
               aria-hidden="true"
             />
@@ -735,7 +785,7 @@ function addMissingParent(slot: FanSlot) {
         </div>
         <p
           v-else
-          class="fan-relatives-empty"
+          class="m-0 text-[#697185] text-[0.8125rem] leading-[1.5]"
         >
           {{ group.empty }}
         </p>
@@ -743,372 +793,3 @@ function addMissingParent(slot: FanSlot) {
     </div>
   </section>
 </template>
-
-<style scoped>
-.radial-tree {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(12rem, 1fr) auto;
-  width: 100%;
-  height: 100%;
-  min-height: 30rem;
-  overflow: auto;
-  background: radial-gradient(circle at 50% 100%, #fff 0, #f8f9fd 55%, #f2f4fa 100%);
-}
-.radial-toolbar {
-  position: relative;
-  z-index: 5;
-  margin: 0.75rem 0.75rem 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  border: 1px solid rgba(218, 221, 234, 0.9);
-  border-radius: 0.65rem;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.55rem 0.7rem;
-  box-shadow: 0 5px 18px rgba(35, 39, 68, 0.07);
-  backdrop-filter: blur(8px);
-}
-.fan-export {
-  display: flex;
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.fan-export legend {
-  margin-bottom: 0.2rem;
-  font-size: 0.875rem;
-  color: #4d536b;
-}
-.fan-export button {
-  min-height: 2.5rem;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid #d8dbea;
-  border-radius: 0.5rem;
-  color: #4546bc;
-  background: #f7f8fc;
-  font-size: 0.875rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-.fan-export button:hover {
-  background: #eeeeff;
-}
-.fan-export button:focus-visible {
-  outline: 2px solid #5657d9;
-  outline-offset: 2px;
-}
-.fan-navigation button {
-  display: grid;
-  place-items: center;
-  min-width: 2.5rem;
-}
-.fan-navigation button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.fan-navigation-hint {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.4;
-  color: #596176;
-}
-.fan-export:disabled {
-  opacity: 0.5;
-}
-.fan-export:disabled button {
-  cursor: wait;
-}
-.export-message {
-  flex-basis: 100%;
-  margin: 0;
-  color: #4546bc;
-  font-size: 0.875rem;
-  overflow-wrap: anywhere;
-}
-.export-message.export-error {
-  color: #a52639;
-}
-.radial-toolbar > div {
-  display: grid;
-  flex: 1;
-  gap: 0.12rem;
-  min-width: 0;
-}
-.radial-toolbar > .radial-search-row {
-  display: flex;
-  flex: 1 0 100%;
-  position: relative;
-  z-index: 6;
-}
-.radial-back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  flex-shrink: 0;
-  min-height: 2.5rem;
-  border: 1px solid #d8dbea;
-  border-radius: 0.5rem;
-  background: #f7f8fc;
-  padding: 0.45rem 0.6rem;
-  color: #4546bc;
-  font-size: 0.875rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-.radial-back:hover:not(:disabled) {
-  background: #eeeeff;
-  border-color: #9293e4;
-}
-.radial-back:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.radial-toolbar span {
-  color: #73798c;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.radial-toolbar strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.72rem;
-}
-.radial-toolbar label {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-.generation-select {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.generation-select select {
-  appearance: none;
-  min-width: 3.2rem;
-  border: 1px solid #d8dbea;
-  border-radius: 0.5rem;
-  background: #f7f8fc;
-  padding: 0.38rem 1.35rem 0.38rem 0.55rem;
-  color: #35394d;
-  font-size: 0.72rem;
-  font-weight: 800;
-  outline: none;
-  cursor: pointer;
-}
-.generation-select svg {
-  position: absolute;
-  right: 0.35rem;
-  color: #73798c;
-  pointer-events: none;
-}
-.fan-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  padding: 0.4rem 0.7rem 0.2rem;
-  overflow: hidden;
-  user-select: none;
-}
-.fan-canvas:focus-visible {
-  outline: 2px solid #7778df;
-  outline-offset: -3px;
-}
-.fan-canvas.fan-dragging,
-.fan-canvas.fan-dragging * {
-  cursor: grabbing !important;
-}
-.fan-relatives {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.75rem;
-  border-top: 1px solid #dfe3ed;
-  padding: 0.8rem;
-  background: rgba(255, 255, 255, 0.94);
-}
-.fan-relative-group {
-  min-width: 0;
-}
-.fan-relative-group h3 {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0 0 0.5rem;
-  color: #363b54;
-  font-size: 0.875rem;
-  font-weight: 800;
-}
-.fan-relative-group h3 > span {
-  border-radius: 1rem;
-  background: #ececff;
-  padding: 0.1rem 0.45rem;
-  color: #5051b7;
-  font-size: 0.75rem;
-}
-.fan-relative-list {
-  display: grid;
-  align-content: start;
-  gap: 0.4rem;
-  max-height: 9rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 2px;
-}
-.fan-relative-card {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  border: 1px solid #dfe3ed;
-  border-radius: 0.6rem;
-  padding: 0.6rem;
-  background: #fff;
-  text-align: left;
-  cursor: pointer;
-}
-.fan-relative-card:hover {
-  border-color: #9798e2;
-  background: #f5f5ff;
-}
-.fan-relative-card:focus-visible {
-  outline: 2px solid #5657d9;
-  outline-offset: -2px;
-}
-.fan-relative-avatar {
-  display: grid;
-  place-items: center;
-  flex: 0 0 2.2rem;
-  height: 2.2rem;
-  border-radius: 0.55rem;
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-.fan-relative-details {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-  gap: 0.15rem;
-  overflow-wrap: anywhere;
-}
-.fan-relative-details strong {
-  font-size: 0.875rem;
-  line-height: 1.35;
-}
-.fan-relative-details small {
-  color: #626a7f;
-  font-size: 0.75rem;
-  line-height: 1.4;
-}
-.fan-relative-card > svg {
-  flex-shrink: 0;
-  color: #7277a8;
-}
-.fan-relatives-empty {
-  margin: 0;
-  color: #697185;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-}
-.fan-segment path {
-  transition:
-    filter 0.15s,
-    fill 0.15s;
-}
-.fan-segment:has(.fan-person):hover path {
-  filter: brightness(0.96) saturate(1.15);
-}
-.fan-segment.details-visible > path {
-  stroke: #5657d9;
-  stroke-width: 3px;
-}
-.fan-person,
-.fan-add {
-  cursor: pointer;
-  outline: none;
-}
-.fan-person text {
-  fill: #24283c;
-  paint-order: stroke;
-  stroke: rgba(255, 255, 255, 0.58);
-  stroke-width: 2px;
-  stroke-linejoin: round;
-}
-.fan-person:focus-visible text {
-  fill: #5657d9;
-}
-.fan-years {
-  fill: #73798c;
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-.fan-add circle {
-  fill: #fff;
-  stroke: #aeb4c7;
-  stroke-width: 1.5;
-  transition:
-    fill 0.15s,
-    stroke 0.15s,
-    transform 0.15s;
-}
-.fan-add svg {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  color: #686f84;
-  pointer-events: none;
-}
-.fan-add:hover circle,
-.fan-add:focus-visible circle {
-  fill: #5657d9;
-  stroke: #5657d9;
-  transform: scale(1.08);
-}
-.fan-add:hover svg,
-.fan-add:focus-visible svg {
-  color: #fff;
-}
-.fan-root {
-  cursor: default;
-  outline: none;
-  filter: drop-shadow(0 8px 16px rgba(40, 42, 82, 0.2));
-}
-.root-years {
-  font-size: 10px;
-  font-weight: 650;
-  opacity: 0.82;
-}
-@media (max-width: 600px) {
-  .radial-toolbar {
-    align-items: center;
-    gap: 0.45rem;
-  }
-  .radial-toolbar label > span:first-child {
-    display: none;
-  }
-  .fan-canvas {
-    padding-left: 0.15rem;
-    padding-right: 0.15rem;
-  }
-}
-@media (max-width: 440px) {
-  .fan-relatives {
-    grid-template-columns: 1fr;
-  }
-  .fan-relative-list {
-    max-height: 6rem;
-  }
-}
-</style>

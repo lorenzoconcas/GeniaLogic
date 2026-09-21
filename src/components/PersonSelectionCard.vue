@@ -22,15 +22,16 @@ function details(person: Person) {
 </script>
 
 <template>
-  <section class="person-selection">
-    <p>{{ label }}</p>
+  <section class="min-w-0">
+    <p class="mx-0 mt-0 mb-[0.55rem] text-[#4f5569] text-[1rem] font-[750]">{{ label }}</p>
     <button
+      class="p-[0.8rem] border border-[#bdbfeb] flex items-center gap-3 w-full min-h-[6.7rem] rounded-xl bg-[#f4f4ff] bg-none text-[#181b2d] cursor-pointer hover:border-[#7778df] hover:bg-[#eeeeff] hover:bg-none focus-visible:[outline:3px_solid_rgba(86,_87,_217,_0.2)] focus-visible:outline-offset-[2px]"
       type="button"
       :aria-label="`${label}: ${person ? fullName(person) : 'nessuna persona selezionata'}. Apri ricerca`"
       @click="$emit('choose')"
     >
       <span
-        class="selection-avatar"
+        class="grid place-items-center w-[2.6rem] h-[2.6rem] flex-none rounded-[0.65rem] text-white text-[0.875rem] font-extrabold uppercase"
         :style="{ background: person?.color ?? '#73798c' }"
       >
         <template v-if="person">{{ person.firstName[0] }}{{ person.lastName[0] }}</template>
@@ -39,87 +40,33 @@ function details(person: Person) {
           :size="20"
         />
       </span>
-      <span class="selection-identity">
-        <strong>{{ person ? fullName(person) : 'Scegli una persona' }}</strong>
-        <small v-if="person">{{ details(person) }}</small>
-        <small v-else>Cerca per nome, data o luogo</small>
+      <span class="grid min-w-0 flex-1 gap-1 text-left wrap-anywhere">
+        <strong class="text-[1rem] leading-[1.3]">
+          {{ person ? fullName(person) : 'Scegli una persona' }}
+        </strong>
+        <small
+          class="text-[#596176] text-[0.78rem] leading-[1.4]"
+          v-if="person"
+        >
+          {{ details(person) }}
+        </small>
+        <small
+          class="text-[#596176] text-[0.78rem] leading-[1.4]"
+          v-else
+        >
+          Cerca per nome, data o luogo
+        </small>
       </span>
       <Check
         v-if="person"
         :size="17"
-        class="selection-status"
+        class="flex-none text-[#5657d9]"
       />
       <ChevronRight
         v-else
         :size="18"
-        class="selection-status"
+        class="flex-none text-[#5657d9]"
       />
     </button>
   </section>
 </template>
-
-<style scoped>
-.person-selection {
-  min-width: 0;
-}
-.person-selection > p {
-  margin: 0 0 0.55rem;
-  color: #4f5569;
-  font-size: 1rem;
-  font-weight: 750;
-}
-.person-selection > button {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  min-height: 6.7rem;
-  border: 1px solid #bdbfeb;
-  border-radius: 0.75rem;
-  background: #f4f4ff;
-  padding: 0.8rem;
-  color: #181b2d;
-  cursor: pointer;
-}
-.person-selection > button:hover {
-  border-color: #7778df;
-  background: #eeeeff;
-}
-.person-selection > button:focus-visible {
-  outline: 3px solid rgba(86, 87, 217, 0.2);
-  outline-offset: 2px;
-}
-.selection-avatar {
-  display: grid;
-  place-items: center;
-  width: 2.6rem;
-  height: 2.6rem;
-  flex: 0 0 auto;
-  border-radius: 0.65rem;
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-.selection-identity {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  gap: 0.25rem;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.selection-identity strong {
-  font-size: 1rem;
-  line-height: 1.3;
-}
-.selection-identity small {
-  color: #596176;
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-.selection-status {
-  flex: 0 0 auto;
-  color: #5657d9;
-}
-</style>

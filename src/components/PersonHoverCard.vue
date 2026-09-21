@@ -53,7 +53,7 @@ onBeforeUnmount(() => {
     <aside
       :id="id"
       ref="card"
-      class="person-hover-card"
+      class="p-4 border border-[#bfc3e4] fixed z-90 w-92 max-w-[calc(100vw_-_16px)] max-h-[min(35rem,_calc(100dvh_-_16px))] overflow-auto overscroll-contain rounded-[0.8rem] bg-white bg-none text-[#24283c] shadow-[0_12px_40px_#24283c30] wrap-anywhere"
       role="tooltip"
       :style="{
         left: `${position.x}px`,
@@ -63,93 +63,29 @@ onBeforeUnmount(() => {
       @pointerenter="emit('keepOpen')"
       @pointerleave="emit('leave')"
     >
-      <p class="hover-generation">
+      <p class="mx-0 mt-0 mb-[0.3rem] text-[0.875rem] font-bold text-[#5657b9]">
         {{ generation === 0 ? 'Persona al centro' : `Generazione ${generation}` }}
       </p>
-      <h3>{{ person.firstName }} {{ person.lastName }}</h3>
-      <dl>
+      <h3 class="mx-0 mt-0 mb-[0.85rem] text-[1.2rem] leading-[1.35] font-extrabold">
+        {{ person.firstName }} {{ person.lastName }}
+      </h3>
+      <dl class="m-0 grid gap-[0.6rem]">
         <div
+          class="grid grid-cols-[7rem_minmax(0,_1fr)] gap-[0.65rem]"
           v-for="row in rows"
           :key="row.label"
         >
-          <dt>{{ row.label }}</dt>
-          <dd>{{ row.value }}</dd>
+          <dt class="text-[#626a7f] text-[0.875rem]">{{ row.label }}</dt>
+          <dd class="m-0 text-[1rem] leading-[1.35]">{{ row.value }}</dd>
         </div>
       </dl>
       <section
         v-if="person.notes?.trim()"
-        class="hover-notes"
+        class="mt-[0.85rem] border-t border-t-[#e1e4ee] pt-3"
       >
-        <h4>Note</h4>
-        <p>{{ person.notes }}</p>
+        <h4 class="mx-0 mt-0 mb-[0.3rem] text-[0.875rem] text-[#626a7f] font-bold">Note</h4>
+        <p class="m-0 text-[1rem] leading-[1.5] whitespace-pre-wrap">{{ person.notes }}</p>
       </section>
     </aside>
   </Teleport>
 </template>
-
-<style scoped>
-.person-hover-card {
-  position: fixed;
-  z-index: 90;
-  width: 23rem;
-  max-width: calc(100vw - 16px);
-  max-height: min(35rem, calc(100dvh - 16px));
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: 1rem;
-  border: 1px solid #bfc3e4;
-  border-radius: 0.8rem;
-  background: #fff;
-  color: #24283c;
-  box-shadow: 0 12px 40px #24283c30;
-  overflow-wrap: anywhere;
-}
-.hover-generation {
-  margin: 0 0 0.3rem;
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: #5657b9;
-}
-.person-hover-card h3 {
-  margin: 0 0 0.85rem;
-  font-size: 1.2rem;
-  line-height: 1.35;
-  font-weight: 800;
-}
-.person-hover-card dl {
-  display: grid;
-  gap: 0.6rem;
-  margin: 0;
-}
-.person-hover-card dl > div {
-  display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr);
-  gap: 0.65rem;
-}
-.person-hover-card dt {
-  color: #626a7f;
-  font-size: 0.875rem;
-}
-.person-hover-card dd {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.35;
-}
-.hover-notes {
-  margin-top: 0.85rem;
-  border-top: 1px solid #e1e4ee;
-  padding-top: 0.75rem;
-}
-.hover-notes h4 {
-  margin: 0 0 0.3rem;
-  font-size: 0.875rem;
-  color: #626a7f;
-  font-weight: 700;
-}
-.hover-notes p {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-</style>

@@ -1,12 +1,8 @@
 @import 'tailwindcss';
-
-/* L’ordine conserva la cascata: regole condivise, viste, moduli, override responsive. */
-@import './styles/base.css';
-@import './styles/shell.css';
-@import './styles/tree.css';
-@import './styles/lists.css';
-@import './styles/forms.css';
-@import './styles/responsive.css';
+/* Vendor styles stay below utilities so graph customization follows Tailwind’s cascade. */
+@import '@vue-flow/core/dist/style.css' layer(components);
+@import '@vue-flow/core/dist/theme-default.css' layer(components);
+@import '@vue-flow/controls/dist/style.css' layer(components);
 
 @theme {
   --font-sans: Inter, 'Avenir Next', system-ui, sans-serif;
@@ -18,4 +14,43 @@
   --color-line: #dfe3ed;
   --color-soft: #eff1f7;
   --color-forest: #5657d9;
+  --color-forest-hover: #4546bd;
+  --color-terracotta: #e85d75;
+  --color-ochre: #0f9b8e;
+  --color-navy: #161a2e;
+  --shadow-panel: 0 16px 42px rgb(24 27 45 / 9%);
+  --animate-modal-in: modal-in 180ms ease-out;
+
+  @keyframes modal-in {
+    from {
+      transform: translateY(8px) scale(0.985);
+      opacity: 0;
+    }
+  }
+}
+
+/* Defaults shared by native controls; component styling lives in Tailwind utilities. */
+@layer base {
+  :root {
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgb(49 93 80 / 20%);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }

@@ -83,16 +83,16 @@ watch(
 
 <template>
   <fieldset
-    class="person-picker"
-    :class="{ 'person-picker-fill': fill }"
+    class="group/person-picker p-0 m-0 border-0 border-transparent min-w-0 data-person-picker-fill:flex data-person-picker-fill:min-h-0 data-person-picker-fill:h-full data-person-picker-fill:flex-col"
+    :data-person-picker-fill="fill || undefined"
   >
-    <legend>{{ label }}</legend>
+    <legend class="mb-[0.55rem] text-[#4f5569] text-[1rem] font-[750]">{{ label }}</legend>
     <div
-      class="picker-selected"
+      class="p-[0.7rem] border border-[#bdbfeb] flex items-center gap-[0.65rem] min-w-0 min-h-[6.7rem] rounded-[0.65rem] bg-[#f4f4ff] bg-none"
       aria-live="polite"
     >
       <div
-        class="picker-avatar"
+        class="grid place-items-center w-[2.4rem] h-[2.4rem] flex-none rounded-[0.6rem] text-white text-[0.875rem] font-extrabold uppercase"
         :style="{ background: selected?.color ?? '#73798c' }"
       >
         <template v-if="selected">{{ selected.firstName[0] }}{{ selected.lastName[0] }}</template>
@@ -103,32 +103,37 @@ watch(
       </div>
       <div
         v-if="selected"
-        class="picker-identity"
+        class="grid flex-1 gap-1 min-w-0 text-left wrap-anywhere"
       >
-        <strong>{{ fullName(selected) }}</strong>
-        <small>{{ details(selected) }}</small>
+        <strong class="text-[1rem] leading-[1.3]">{{ fullName(selected) }}</strong>
+        <small class="text-[#596176] text-[0.8125rem] leading-[1.45]">
+          {{ details(selected) }}
+        </small>
         <small
           v-if="isNamesake(selected)"
-          class="picker-reference"
+          class="text-[#4f50ad] text-[0.75rem] leading-[1.45]"
         >
           Rif. {{ selected.id }}
         </small>
       </div>
       <div
         v-else
-        class="picker-identity"
+        class="grid flex-1 gap-1 min-w-0 text-left wrap-anywhere"
       >
-        <strong>Scegli una persona</strong>
+        <strong class="text-[1rem] leading-[1.3]">Scegli una persona</strong>
       </div>
       <Check
         v-if="selected"
         :size="17"
-        class="picker-check"
+        class="shrink-0 text-[#5657d9]"
       />
     </div>
-    <label class="picker-search">
+    <label
+      class="p-[0.55rem] border border-[#d6d9e4] flex items-center gap-[0.45rem] mt-[0.65rem] rounded-[0.55rem] text-[#6e7588] focus-within:[outline:2px_solid_#7778df] focus-within:outline-offset-[2px]"
+    >
       <Search :size="17" />
       <input
+        class="border-0 border-transparent w-full min-w-0 outline-none bg-transparent bg-none text-[#181b2d] text-[0.875rem]"
         v-model="search"
         type="search"
         :autofocus="autofocusSearch"
@@ -136,32 +141,36 @@ watch(
         placeholder="Nome, cognome, anno o luogo…"
       />
     </label>
-    <p class="picker-count">{{ results.length }} persone · ordine per cognome</p>
+    <p class="mx-0 my-[0.4rem] text-[#6e7588] text-[0.75rem]">
+      {{ results.length }} persone · ordine per cognome
+    </p>
     <div
-      class="picker-results"
+      class="border border-[#dfe3ed] max-h-60 overflow-y-auto overscroll-contain rounded-[0.65rem] group-data-person-picker-fill/person-picker:min-h-36 group-data-person-picker-fill/person-picker:max-h-[none] group-data-person-picker-fill/person-picker:flex-1"
       :aria-label="`Persone per ${label.toLocaleLowerCase('it')}`"
     >
       <button
         v-for="person in results"
         :key="person.id"
         type="button"
-        class="picker-option"
-        :class="{ chosen: person.id === modelValue }"
+        class="p-[0.7rem] flex items-center gap-[0.65rem] min-w-0 w-full border-t-0 border-t-transparent border-r-0 border-r-transparent border-b border-b-[#e8eaf1] border-l-0 border-l-transparent bg-white bg-none cursor-pointer last:border-b-0 last:border-b-transparent hover:bg-[#f0f0ff] hover:bg-none data-chosen:bg-[#f0f0ff] data-chosen:bg-none focus-visible:[outline:2px_solid_#5657d9] focus-visible:outline-offset-[-3px]"
+        :data-chosen="person.id === modelValue || undefined"
         :aria-pressed="person.id === modelValue"
         @click="emit('update:modelValue', person.id)"
       >
         <span
-          class="picker-avatar"
+          class="grid place-items-center w-[2.4rem] h-[2.4rem] flex-none rounded-[0.6rem] text-white text-[0.875rem] font-extrabold uppercase"
           :style="{ background: person.color }"
         >
           {{ person.firstName[0] }}{{ person.lastName[0] }}
         </span>
-        <span class="picker-identity">
-          <strong>{{ fullName(person) }}</strong>
-          <small>{{ details(person) }}</small>
+        <span class="grid flex-1 gap-1 min-w-0 text-left wrap-anywhere">
+          <strong class="text-[1rem] leading-[1.3]">{{ fullName(person) }}</strong>
+          <small class="text-[#596176] text-[0.8125rem] leading-[1.45]">
+            {{ details(person) }}
+          </small>
           <small
             v-if="isNamesake(person)"
-            class="picker-reference"
+            class="text-[#4f50ad] text-[0.75rem] leading-[1.45]"
           >
             Rif. {{ person.id }}
           </small>
@@ -169,151 +178,15 @@ watch(
         <Check
           v-if="person.id === modelValue"
           :size="16"
-          class="picker-check"
+          class="shrink-0 text-[#5657d9]"
         />
       </button>
       <p
         v-if="!results.length"
-        class="picker-empty"
+        class="p-4 m-0 text-[#6e7588] text-[0.875rem]"
       >
         Nessuna corrispondenza. Prova un altro nome, anno o luogo.
       </p>
     </div>
   </fieldset>
 </template>
-
-<style scoped>
-.person-picker {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.person-picker legend {
-  margin-bottom: 0.55rem;
-  color: #4f5569;
-  font-size: 1rem;
-  font-weight: 750;
-}
-.picker-selected,
-.picker-option {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  min-width: 0;
-  padding: 0.7rem;
-}
-.picker-selected {
-  min-height: 6.7rem;
-  border: 1px solid #bdbfeb;
-  border-radius: 0.65rem;
-  background: #f4f4ff;
-}
-.picker-avatar {
-  display: grid;
-  place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  flex: 0 0 auto;
-  border-radius: 0.6rem;
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-.picker-identity {
-  display: grid;
-  flex: 1;
-  gap: 0.25rem;
-  min-width: 0;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.picker-identity strong {
-  font-size: 1rem;
-  line-height: 1.3;
-}
-.picker-identity small {
-  color: #596176;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-.picker-identity .picker-reference {
-  font-size: 0.75rem;
-  color: #4f50ad;
-}
-.picker-check {
-  flex-shrink: 0;
-  color: #5657d9;
-}
-.picker-search {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin-top: 0.65rem;
-  border: 1px solid #d6d9e4;
-  border-radius: 0.55rem;
-  padding: 0.55rem;
-  color: #6e7588;
-}
-.picker-search input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: #181b2d;
-  font-size: 0.875rem;
-}
-.picker-search:focus-within {
-  outline: 2px solid #7778df;
-  outline-offset: 2px;
-}
-.picker-count {
-  margin: 0.4rem 0;
-  color: #6e7588;
-  font-size: 0.75rem;
-}
-.picker-results {
-  max-height: 15rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid #dfe3ed;
-  border-radius: 0.65rem;
-}
-.person-picker-fill {
-  display: flex;
-  min-height: 0;
-  height: 100%;
-  flex-direction: column;
-}
-.person-picker-fill .picker-results {
-  min-height: 9rem;
-  max-height: none;
-  flex: 1;
-}
-.picker-option {
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid #e8eaf1;
-  background: white;
-  cursor: pointer;
-}
-.picker-option:last-child {
-  border-bottom: 0;
-}
-.picker-option:hover,
-.picker-option.chosen {
-  background: #f0f0ff;
-}
-.picker-option:focus-visible {
-  outline: 2px solid #5657d9;
-  outline-offset: -3px;
-}
-.picker-empty {
-  margin: 0;
-  padding: 1rem;
-  color: #6e7588;
-  font-size: 0.875rem;
-}
-</style>
