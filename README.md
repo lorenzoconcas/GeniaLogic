@@ -71,3 +71,37 @@ di importarlo. Non occorre rinominare il file.
 
 Se un provider cloud non rende leggibile il documento, scaricalo o copialo in
 **Su iPhone / Su iPad** nell’app File, poi seleziona la copia locale.
+
+## Struttura del codice
+
+- `src/App.vue` coordina navigazione, selezione e composizione dell’interfaccia.
+- `src/composables/useTreeArchive.ts` gestisce il ripristino iniziale, il salvataggio
+  locale, il collegamento ai file e la risoluzione dei conflitti.
+- `src/composables/useTreeEditor.ts` mantiene le bozze dei moduli e applica le
+  modifiche a persone e legami, con le relative validazioni.
+- `src/composables/useTreeGraph.ts` costruisce nodi e archi di Vue Flow e coordina
+  layout, selezione e centratura del grafico.
+- `src/components/*View.vue`, `*Dialog.vue` e `PersonInspector.vue` contengono
+  rispettivamente le viste, i moduli e la scheda della persona selezionata.
+- `src/services/` contiene algoritmi genealogici, accesso allo storage,
+  esportazione e funzioni di presentazione indipendenti dai componenti.
+- `src/styles/` divide gli stili in base, struttura dell’app, albero, liste,
+  moduli e adattamenti responsive. `src/style.css` ne conserva l’ordine di importazione.
+- `src/types.ts` definisce i dati salvati; `src/uiTypes.ts` e `src/editorOptions.ts`
+  raccolgono tipi e opzioni dell’interfaccia.
+
+I composable ricevono gli stessi riferimenti reattivi all’albero e alla selezione:
+quando si apre un archivio diverso, editor e grafico seguono la nuova copia.
+Le viste comunicano le azioni tramite eventi; i moduli usano lo stato dell’editor
+condiviso per conservare le bozze quando vengono chiusi e riaperti.
+
+## Verifiche e formattazione
+
+```bash
+npm test
+npm run build
+```
+
+I test coprono gli algoritmi e i flussi di modifica e archivio. La build verifica
+anche i tipi TypeScript e i template Vue. Le convenzioni di formattazione sono in
+`.prettierrc.json`, utilizzabile dall’integrazione Prettier dell’editor.
